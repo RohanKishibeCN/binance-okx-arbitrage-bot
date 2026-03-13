@@ -12,15 +12,20 @@ load_dotenv()
 DRY_RUN = os.getenv('DRY_RUN', 'True').lower() == 'true'
 NANOBOT_URL = os.getenv('NANOBOT_URL')
 
+# === 关键修复：强制 spot + 超时 ===
 binance = ccxt.binance({
     'apiKey': os.getenv('BINANCE_API'),
     'secret': os.getenv('BINANCE_SECRET'),
     'enableRateLimit': True,
+    'options': {'defaultType': 'spot'},
+    'timeout': 30000,
 })
 okx = ccxt.okx({
     'apiKey': os.getenv('OKX_API'),
     'secret': os.getenv('OKX_SECRET'),
     'enableRateLimit': True,
+    'options': {'defaultType': 'spot'},
+    'timeout': 30000,
 })
 
 notion = Client(auth=os.getenv('NOTION_TOKEN'))
@@ -46,44 +51,37 @@ def write_to_notion(type_, content, profit=0, exchange=""):
     except Exception as e:
         print(f"Notion 写入失败: {e}")
 
+# === 简化三角套利（只用稳定三角，避免 None）===
 async def triangular_loop(ex, name):
+    safe_triangles = [
+        ('BTC/USDT', 'ETH/BTC', 'ETH/USDT'),
+        ('SOL/USDT', 'ETH/SOL', 'ETH/USDT'),  # 如果不存在会自动跳过
+    ]
     while True:
         try:
             await ex.load_markets()
-            bases = ['BTC', 'ETH', 'SOL']
-            quotes = ['USDT', 'BTC', 'ETH']
-            triangles = []
-            for b in bases:
-                for q1 in quotes:
-                    for q2 in quotes:
-                        if q1 == q2: continue
-                        s1 = f"{b}/{q1}"
-                        s2 = f"{q1 if q1 != b else b}/{q2}"
-                        s3 = f"{q2 if q2 != b else b}/{b}"
-                        if all(s in ex.markets for s in [s1, s2, s3]):
-                            triangles.append((s1, s2, s3))
-
-            tickers = await ex.fetch_tickers([s for t in triangles for s in t])
-            for s1, s2, s3 in triangles:
+            tickers = await ex.fetch_tickers([s for t in safe_triangles for s in t])
+            for s1, s2, s3 in safe_triangles:
                 if not all(s in tickers and tickers[s] and tickers[s].get('bid') and tickers[s].get('ask') for s in [s1, s2, s3]):
                     continue
                 for direction in [1, -1]:
-                    if direction == 1:
-                        p = (1 / tickers[s1]['bid']) * tickers[s2]['bid'] * tickers[s3]['ask']
-                    else:
-                        p = tickers[s1]['ask'] * (1 / tickers[s2]['ask']) * (1 / tickers[s3]['bid'])
-                    profit = p - 1
-                    if profit > MIN_PROFIT + SLIPPAGE_BUFFER:
-                        executable = TRADE_AMOUNT_USDT * 0.95
-                        profit_usdt = profit * executable
-                        msg = f"{name} 三角套利 {s1}-{s2}-{s3} 利润率 {profit:.4%}"
-                        print(msg)
-                        write_to_notion("交易明细", msg, profit_usdt, name)
-                        if not DRY_RUN:
-                            print("✅ 执行订单")
+                    try:
+                        if direction == 1:
+                            p = (1 / tickers[s1]['bid']) * tickers[s2]['bid'] * tickers[s3]['ask']
+                        else:
+                            p = tickers[s1]['ask'] * (1 / tickers[s2]['ask']) * (1 / tickers[s3]['bid'])
+                        profit = p - 1
+                        if profit > MIN_PROFIT + SLIPPAGE_BUFFER:
+                            msg = f"{name} 三角套利 {s1}-{s2}-{s3} 利润率 {profit:.4%}"
+                            print(msg)
+                            write_to_notion("交易明细", msg, profit * TRADE_AMOUNT_USDT, name)
+                            if not DRY_RUN:
+                                print("✅ 执行订单")
+                    except:
+                        continue
         except Exception as e:
-            print(f"{name} 循环错误: {e}")
-        await asyncio.sleep(5)
+            print(f"{name} 循环错误: {type(e).__name__}: {str(e)[:100]}")
+        await asyncio.sleep(8)  # 稍微慢一点，避免限频
 
 async def cross_loop():
     symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
@@ -92,18 +90,20 @@ async def cross_loop():
             bin_t = await binance.fetch_tickers(symbols)
             okx_t = await okx.fetch_tickers(symbols)
             for sym in symbols:
-                if not (bin_t.get(sym) and okx_t.get(sym)): continue
-                p_bin = (bin_t[sym].get('bid', 0) + bin_t[sym].get('ask', 0)) / 2
-                p_okx = (okx_t[sym].get('bid', 0) + okx_t[sym].get('ask', 0)) / 2
-                if p_bin == 0 or p_okx == 0: continue
+                bt = bin_t.get(sym)
+                ot = okx_t.get(sym)
+                if not (bt and ot and bt.get('bid') and bt.get('ask') and ot.get('bid') and ot.get('ask')):
+                    continue
+                p_bin = (bt['bid'] + bt['ask']) / 2
+                p_okx = (ot['bid'] + ot['ask']) / 2
                 diff = abs(p_bin - p_okx) / ((p_bin + p_okx) / 2)
                 if diff > 0.0065 + 2 * FEE + SLIPPAGE_BUFFER:
                     msg = f"跨CEX {sym} 差价 {diff:.4%}"
                     print(msg)
                     write_to_notion("交易明细", msg, diff * TRADE_AMOUNT_USDT, "Cross")
         except Exception as e:
-            print(f"跨CEX 循环错误: {e}")
-        await asyncio.sleep(5)
+            print(f"跨CEX 循环错误: {type(e).__name__}: {str(e)[:100]}")
+        await asyncio.sleep(8)
 
 async def daily_summary():
     while True:
