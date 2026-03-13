@@ -99,8 +99,18 @@ async def daily_summary():
                 requests.post(NANOBOT_URL + "/trigger", json={"prompt": f"请美化后推送到 QQ：\n{full_summary}"})
 
 async def main():
-    print("🚀 机器人启动（DRY_RUN=" + str(DRY_RUN) + "）")
-    await asyncio.gather(triangular_loop(binance, "Binance"), triangular_loop(okx, "OKX"), cross_loop(), daily_summary())
+    print("🚀 机器人启动（DRY_RUN=True）")
+    try:
+        await asyncio.gather(
+            triangular_loop(binance, "Binance"),
+            triangular_loop(okx, "OKX"),
+            cross_loop(),
+            daily_summary()
+        )
+    finally:
+        await binance.close()
+        await okx.close()
+        print("✅ 连接已安全关闭")
 
 if __name__ == "__main__":
     asyncio.run(main())
