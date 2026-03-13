@@ -12,7 +12,6 @@ load_dotenv()
 DRY_RUN = os.getenv('DRY_RUN', 'True').lower() == 'true'
 NANOBOT_URL = os.getenv('NANOBOT_URL')
 
-# === 关键修复：强制 spot + 超时 ===
 binance = ccxt.binance({
     'apiKey': os.getenv('BINANCE_API'),
     'secret': os.getenv('BINANCE_SECRET'),
@@ -51,16 +50,16 @@ def write_to_notion(type_, content, profit=0, exchange=""):
     except Exception as e:
         print(f"Notion 写入失败: {e}")
 
-# === 简化三角套利（只用稳定三角，避免 None）===
+# === 只用最稳定三角（BTC-ETH-USDT 双向）===
+safe_triangles = [
+    ('BTC/USDT', 'ETH/BTC', 'ETH/USDT')
+]
+
 async def triangular_loop(ex, name):
-    safe_triangles = [
-        ('BTC/USDT', 'ETH/BTC', 'ETH/USDT'),
-        ('SOL/USDT', 'ETH/SOL', 'ETH/USDT'),  # 如果不存在会自动跳过
-    ]
     while True:
         try:
             await ex.load_markets()
-            tickers = await ex.fetch_tickers([s for t in safe_triangles for s in t])
+            tickers = await ex.fetch_tickers(['BTC/USDT', 'ETH/BTC', 'ETH/USDT'])
             for s1, s2, s3 in safe_triangles:
                 if not all(s in tickers and tickers[s] and tickers[s].get('bid') and tickers[s].get('ask') for s in [s1, s2, s3]):
                     continue
@@ -80,8 +79,8 @@ async def triangular_loop(ex, name):
                     except:
                         continue
         except Exception as e:
-            print(f"{name} 循环错误: {type(e).__name__}: {str(e)[:100]}")
-        await asyncio.sleep(8)  # 稍微慢一点，避免限频
+            print(f"{name} 循环错误: {type(e).__name__}: {str(e)[:80]}")
+        await asyncio.sleep(5)
 
 async def cross_loop():
     symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
@@ -102,8 +101,8 @@ async def cross_loop():
                     print(msg)
                     write_to_notion("交易明细", msg, diff * TRADE_AMOUNT_USDT, "Cross")
         except Exception as e:
-            print(f"跨CEX 循环错误: {type(e).__name__}: {str(e)[:100]}")
-        await asyncio.sleep(8)
+            print(f"跨CEX 循环错误: {type(e).__name__}: {str(e)[:80]}")
+        await asyncio.sleep(5)
 
 async def daily_summary():
     while True:
