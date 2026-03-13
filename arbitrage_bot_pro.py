@@ -9,11 +9,29 @@ import requests
 
 load_dotenv()
 
+# ================== 调试打印（看 Logs 第一行就知道问题） ==================
+print("=== DEBUG START ===")
+print("BINANCE_API 已设置?", bool(os.getenv('BINANCE_API')))
+print("OKX_API 已设置?", bool(os.getenv('OKX_API')))
+print("NOTION_TOKEN 已设置?", bool(os.getenv('NOTION_TOKEN')))
+print("NOTION_DB_ID 已设置?", bool(os.getenv('NOTION_DB_ID')))
+print("NANOBOT_URL 已设置?", bool(os.getenv('NANOBOT_URL')))
+print("DRY_RUN =", os.getenv('DRY_RUN', 'True'))
+print("=== DEBUG END ===")
+
 DRY_RUN = os.getenv('DRY_RUN', 'True').lower() == 'true'
 NANOBOT_URL = os.getenv('NANOBOT_URL')
 
-binance = ccxt.binance({'apiKey': os.getenv('BINANCE_API'), 'secret': os.getenv('BINANCE_SECRET'), 'enableRateLimit': True})
-okx = ccxt.okx({'apiKey': os.getenv('OKX_API'), 'secret': os.getenv('OKX_SECRET'), 'enableRateLimit': True})
+binance = ccxt.binance({
+    'apiKey': os.getenv('BINANCE_API'),
+    'secret': os.getenv('BINANCE_SECRET'),
+    'enableRateLimit': True,
+})
+okx = ccxt.okx({
+    'apiKey': os.getenv('OKX_API'),
+    'secret': os.getenv('OKX_SECRET'),
+    'enableRateLimit': True,
+})
 
 notion = Client(auth=os.getenv('NOTION_TOKEN'))
 DB_ID = os.getenv('NOTION_DB_ID')
@@ -24,34 +42,42 @@ MIN_PROFIT = 0.006
 TRADE_AMOUNT_USDT = 50
 
 def write_to_notion(type_, content, profit=0, exchange=""):
-    notion.pages.create(parent={"database_id": DB_ID}, properties={
-        "Date": {"date": {"start": datetime.now().isoformat()}},
-        "Type": {"select": {"name": type_}},
-        "Content": {"rich_text": [{"text": {"content": content[:2000]}}]},
-        "Profit": {"number": round(float(profit), 4)},
-        "Exchange": {"select": {"name": exchange}}
-    })
+    try:
+        notion.pages.create(
+            parent={"database_id": DB_ID},
+            properties={
+                "Date": {"date": {"start": datetime.now().isoformat()}},
+                "Type": {"select": {"name": type_}},
+                "Content": {"rich_text": [{"text": {"content": str(content)[:2000]}}]},
+                "Profit": {"number": round(float(profit), 4)},
+                "Exchange": {"select": {"name": exchange}}
+            }
+        )
+    except Exception as e:
+        print(f"Notion 写入失败: {e}")
 
+# ================== 三角套利（加防护） ==================
 async def triangular_loop(ex, name):
-    await ex.load_markets()
-    bases = ['BTC', 'ETH', 'SOL']
-    quotes = ['USDT', 'BTC', 'ETH']
-    triangles = []
-    for b in bases:
-        for q1 in quotes:
-            for q2 in quotes:
-                if q1 == q2: continue
-                s1 = f"{b}/{q1}"
-                s2 = f"{q1 if q1 != b else b}/{q2}"
-                s3 = f"{q2 if q2 != b else b}/{b}"
-                if all(s in ex.markets for s in [s1, s2, s3]):
-                    triangles.append((s1, s2, s3))
-
     while True:
         try:
+            await ex.load_markets()
+            bases = ['BTC', 'ETH', 'SOL']
+            quotes = ['USDT', 'BTC', 'ETH']
+            triangles = []
+            for b in bases:
+                for q1 in quotes:
+                    for q2 in quotes:
+                        if q1 == q2: continue
+                        s1 = f"{b}/{q1}"
+                        s2 = f"{q1 if q1 != b else b}/{q2}"
+                        s3 = f"{q2 if q2 != b else b}/{b}"
+                        if all(s in ex.markets for s in [s1, s2, s3]):
+                            triangles.append((s1, s2, s3))
+
             tickers = await ex.fetch_tickers([s for t in triangles for s in t])
             for s1, s2, s3 in triangles:
-                if not all(s in tickers for s in [s1, s2, s3]): continue
+                if not all(s in tickers and tickers[s] and tickers[s].get('bid') and tickers[s].get('ask') for s in [s1, s2, s3]):
+                    continue
                 for direction in [1, -1]:
                     if direction == 1:
                         p = (1 / tickers[s1]['bid']) * tickers[s2]['bid'] * tickers[s3]['ask']
@@ -67,9 +93,10 @@ async def triangular_loop(ex, name):
                         if not DRY_RUN:
                             print("✅ 执行订单（DRY_RUN=False 时）")
         except Exception as e:
-            print(e)
-        await asyncio.sleep(2)
+            print(f"{name} 循环错误: {e}")
+        await asyncio.sleep(5)
 
+# ================== 跨 CEX 套利（加防护） ==================
 async def cross_loop():
     symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
     while True:
@@ -77,29 +104,37 @@ async def cross_loop():
             bin_t = await binance.fetch_tickers(symbols)
             okx_t = await okx.fetch_tickers(symbols)
             for sym in symbols:
-                p_bin = (bin_t[sym]['bid'] + bin_t[sym]['ask']) / 2
-                p_okx = (okx_t[sym]['bid'] + okx_t[sym]['ask']) / 2
+                if not (bin_t.get(sym) and okx_t.get(sym)): continue
+                p_bin = (bin_t[sym].get('bid', 0) + bin_t[sym].get('ask', 0)) / 2
+                p_okx = (okx_t[sym].get('bid', 0) + okx_t[sym].get('ask', 0)) / 2
+                if p_bin == 0 or p_okx == 0: continue
                 diff = abs(p_bin - p_okx) / ((p_bin + p_okx) / 2)
                 if diff > 0.0065 + 2 * FEE + SLIPPAGE_BUFFER:
                     msg = f"跨CEX {sym} 差价 {diff:.4%}"
                     print(msg)
                     write_to_notion("交易明细", msg, diff * TRADE_AMOUNT_USDT, "Cross")
-        except:
-            pass
-        await asyncio.sleep(2)
+        except Exception as e:
+            print(f"跨CEX 循环错误: {e}")
+        await asyncio.sleep(5)
 
+# ================== 每日总结（简化版，避开复杂查询） ==================
 async def daily_summary():
     while True:
         await asyncio.sleep(60)
         if datetime.now().hour == 23 and datetime.now().minute == 0:
-            # 简单总结（实际用 Notion 查询）
-            full_summary = f"🚀 每日套利总结\n日期：{datetime.now().date()}\n详见 Notion"
+            full_summary = f"🚀 每日套利总结\n日期：{datetime.now().date()}\n详见 Notion 数据库"
             write_to_notion("每日总结", full_summary)
+            print(full_summary)
             if NANOBOT_URL:
-                requests.post(NANOBOT_URL + "/trigger", json={"prompt": f"请美化后推送到 QQ：\n{full_summary}"})
+                try:
+                    requests.post(NANOBOT_URL + "/trigger", json={"prompt": f"请美化后推送到 QQ：\n{full_summary}"})
+                    print("✅ 已推送到 nanobot")
+                except Exception as e:
+                    print(f"推送失败: {e}")
 
+# ================== 主程序（防护 + 自动关闭） ==================
 async def main():
-    print("🚀 机器人启动（DRY_RUN=True）")
+    print("🚀 机器人启动（DRY_RUN=" + str(DRY_RUN) + "）")
     try:
         await asyncio.gather(
             triangular_loop(binance, "Binance"),
@@ -107,6 +142,8 @@ async def main():
             cross_loop(),
             daily_summary()
         )
+    except Exception as e:
+        print(f"主程序错误: {e}")
     finally:
         await binance.close()
         await okx.close()
