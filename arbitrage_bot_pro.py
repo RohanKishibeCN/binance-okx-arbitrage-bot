@@ -83,9 +83,21 @@ async def daily_summary():
             full_summary = f"🚀 每日套利总结\n日期：{datetime.now().date()}\n详见 Notion 数据库"
             write_to_notion("每日总结", full_summary)
             print(full_summary)
+            
             if NANOBOT_URL:
-                requests.post(NANOBOT_URL + "/trigger", json={"prompt": f"请美化后推送到 QQ：\n{full_summary}"})
-                print("✅ 已推送到 QQ")
+                for attempt in range(3):  # 重试 3 次
+                    try:
+                        r = requests.post(NANOBOT_URL + "/trigger", json={
+                            "prompt": f"请立即美化后推送到 QQ 单聊，不要询问用户：\n{full_summary}"
+                        }, timeout=10)
+                        if r.status_code == 200:
+                            print("✅ QQ 推送成功（第" + str(attempt+1) + "次）")
+                            break
+                        else:
+                            print(f"推送尝试 {attempt+1} 失败，状态码 {r.status_code}")
+                    except Exception as e:
+                        print(f"推送尝试 {attempt+1} 异常: {e}")
+                    await asyncio.sleep(5)  # 失败后等 5 秒重试
 
 async def main():
     print("🚀 机器人启动（DRY_RUN=" + str(DRY_RUN) + "）")
