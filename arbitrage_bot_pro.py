@@ -22,16 +22,16 @@ SLIPPAGE_BUFFER = 0.002
 MIN_PROFIT = 0.006
 TRADE_AMOUNT_USDT = 50
 
-def write_to_notion(type_, content, profit=0, exchange=""):
+def write_to_notion(type_, content, profit=0, exchange="Summary"):
     try:
         notion.pages.create(parent={"database_id": DB_ID}, properties={
             "Date": {"date": {"start": datetime.now().isoformat()}},
             "Type": {"select": {"name": type_}},
             "Content": {"rich_text": [{"text": {"content": str(content)[:2000]}}]},
             "Profit": {"number": round(float(profit), 4)},
-            "Exchange": {"select": {"name": exchange}}
+            "Exchange": {"select": {"name": exchange}}   # 强制 name，不为空
         })
-        print(f"Notion 写入成功: {type_}")
+        print(f"Notion 写入成功: {type_} ({exchange})")
     except Exception as e:
         print(f"Notion 写入失败: {e}")
 
@@ -50,7 +50,6 @@ async def triangular_loop(ex, name):
                 msg = f"{name} 三角套利 真实利润率 {profit:.4%}"
                 print(msg)
                 write_to_notion("交易明细", msg, profit * TRADE_AMOUNT_USDT, name)
-                if not DRY_RUN: print("✅ 执行订单")
         except Exception as e:
             print(f"{name} 循环错误: {type(e).__name__}")
         await asyncio.sleep(5)
@@ -79,25 +78,22 @@ async def cross_loop():
 async def daily_summary():
     while True:
         await asyncio.sleep(60)
-        if True:
+        if True:   # 测试模式（收到消息后改回 23:00）
             full_summary = f"🚀 每日套利总结\n日期：{datetime.now().date()}\n详见 Notion 数据库"
-            write_to_notion("每日总结", full_summary)
+            write_to_notion("每日总结", full_summary, 0, "Summary")
             print(full_summary)
-            
             if NANOBOT_URL:
-                for attempt in range(3):  # 重试 3 次
+                for attempt in range(3):
                     try:
                         r = requests.post(NANOBOT_URL + "/trigger", json={
                             "prompt": f"请立即美化后推送到 QQ 单聊，不要询问用户：\n{full_summary}"
-                        }, timeout=10)
+                        }, timeout=15)
                         if r.status_code == 200:
                             print("✅ QQ 推送成功（第" + str(attempt+1) + "次）")
                             break
-                        else:
-                            print(f"推送尝试 {attempt+1} 失败，状态码 {r.status_code}")
                     except Exception as e:
-                        print(f"推送尝试 {attempt+1} 异常: {e}")
-                    await asyncio.sleep(5)  # 失败后等 5 秒重试
+                        print(f"推送尝试 {attempt+1} 失败: {e}")
+                    await asyncio.sleep(5)
 
 async def main():
     print("🚀 机器人启动（DRY_RUN=" + str(DRY_RUN) + "）")
