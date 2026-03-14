@@ -78,7 +78,7 @@ async def cross_loop():
 async def daily_summary():
     while True:
         await asyncio.sleep(60)
-        if True:   # 测试模式（收到消息后改回 23:00）
+        if datetime.now().hour == 23 and datetime.now().minute == 0:
             full_summary = f"🚀 每日套利总结\n日期：{datetime.now().date()}\n详见 Notion 数据库"
             write_to_notion("每日总结", full_summary, 0, "Summary")
             print(full_summary)
