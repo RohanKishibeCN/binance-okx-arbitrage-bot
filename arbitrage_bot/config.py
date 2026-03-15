@@ -21,9 +21,9 @@ class RiskConfig(BaseSettings):
     """风控配置"""
     max_daily_loss: float = Field(default=100.0, env="RISK_MAX_DAILY_LOSS")
     max_position_size: float = Field(default=500.0, env="RISK_MAX_POSITION_SIZE")
-    max_trades_per_day: int = Field(default=20, env="RISK_MAX_TRADES_PER_DAY")
-    cooldown_minutes: int = Field(default=5, env="RISK_COOLDOWN_MINUTES")
-    max_consecutive_losses: int = Field(default=3, env="RISK_MAX_CONSECUTIVE_LOSSES")
+    max_trades_per_day: int = Field(default=50, env="RISK_MAX_TRADES_PER_DAY")
+    cooldown_minutes: int = Field(default=3, env="RISK_COOLDOWN_MINUTES")
+    max_consecutive_losses: int = Field(default=5, env="RISK_MAX_CONSECUTIVE_LOSSES")
     
     @validator('max_daily_loss')
     def validate_max_daily_loss(cls, v):
@@ -36,15 +36,15 @@ class TradingConfig(BaseSettings):
     """交易配置"""
     dry_run: bool = Field(default=True, env="DRY_RUN")
     fee_rate: float = Field(default=0.001, env="TRADING_FEE_RATE")
-    slippage_buffer: float = Field(default=0.002, env="TRADING_SLIPPAGE_BUFFER")
-    min_profit_threshold: float = Field(default=0.006, env="MIN_PROFIT")
+    slippage_buffer: float = Field(default=0.0015, env="TRADING_SLIPPAGE_BUFFER")
+    min_profit_threshold: float = Field(default=0.004, env="MIN_PROFIT")
     trade_amount_usdt: float = Field(default=50.0, env="TRADE_AMOUNT_USDT")
-    min_orderbook_depth: float = Field(default=1000.0, env="MIN_ORDERBOOK_DEPTH")
-    check_interval: float = Field(default=1.0, env="CHECK_INTERVAL")
+    min_orderbook_depth: float = Field(default=500.0, env="MIN_ORDERBOOK_DEPTH")
+    check_interval: float = Field(default=0.5, env="CHECK_INTERVAL")
     
     @validator('min_profit_threshold')
     def validate_min_profit(cls, v):
-        if v < 0.003:
+        if v < 0.002:
             raise ValueError('min_profit_threshold too low, risk of loss')
         return v
 
@@ -76,9 +76,27 @@ class Config(BaseSettings):
     trading: TradingConfig = TradingConfig()
     notification: NotificationConfig = NotificationConfig()
     
-    # 交易对配置
-    triangular_symbols: List[str] = ['BTC/USDT', 'ETH/BTC', 'ETH/USDT']
-    cross_exchange_symbols: List[str] = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'DOGE/USDT']
+    # 三角套利路径配置
+    triangular_paths: List[dict] = [
+        {'name': 'BTC-ETH-USDT', 'symbols': ['BTC/USDT', 'ETH/BTC', 'ETH/USDT']},
+        {'name': 'BTC-SOL-USDT', 'symbols': ['BTC/USDT', 'SOL/BTC', 'SOL/USDT']},
+        {'name': 'ETH-SOL-USDT', 'symbols': ['ETH/USDT', 'SOL/ETH', 'SOL/USDT']},
+        {'name': 'BTC-BNB-USDT', 'symbols': ['BTC/USDT', 'BNB/BTC', 'BNB/USDT']},
+        {'name': 'ETH-BNB-USDT', 'symbols': ['ETH/USDT', 'BNB/ETH', 'BNB/USDT']},
+        {'name': 'BTC-XRP-USDT', 'symbols': ['BTC/USDT', 'XRP/BTC', 'XRP/USDT']},
+        {'name': 'ETH-XRP-USDT', 'symbols': ['ETH/USDT', 'XRP/ETH', 'XRP/USDT']},
+        {'name': 'BTC-DOGE-USDT', 'symbols': ['BTC/USDT', 'DOGE/BTC', 'DOGE/USDT']},
+        {'name': 'BTC-ADA-USDT', 'symbols': ['BTC/USDT', 'ADA/BTC', 'ADA/USDT']},
+        {'name': 'ETH-ADA-USDT', 'symbols': ['ETH/USDT', 'ADA/ETH', 'ADA/USDT']},
+    ]
+    
+    # 跨交易所套利币种
+    cross_exchange_symbols: List[str] = [
+        'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'DOGE/USDT',
+        'ADA/USDT', 'BNB/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT',
+        'LTC/USDT', 'BCH/USDT', 'ETC/USDT', 'AVAX/USDT', 'UNI/USDT',
+        'ATOM/USDT', 'FIL/USDT', 'TRX/USDT', 'SHIB/USDT', 'APT/USDT'
+    ]
     
     class Config:
         env_file = '.env'
