@@ -3,6 +3,10 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "python arbitrage_bot_pro.py"
+    "startCommand": "python -m arbitrage_bot.main",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
   }
 }
