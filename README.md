@@ -1,94 +1,185 @@
-# CEX 套利机器人 v2.0
+# CEX 套利机器人 v2.0 - 盈利优化版
 
-基于 Python 的加密货币套利机器人，支持三角套利和跨交易所套利策略。
+基于 Python 的加密货币套利机器人，专注于策略可行性和盈利能力。
 
-## 特性
+## 核心优化
 
-- **三角套利**: 在单一交易所内通过 BTC/ETH/USDT 三角路径套利
-- **跨交易所套利**: 利用 Binance 和 OKX 之间的价格差异套利
-- **双边持仓模式**: 无需等待提币，同时买卖实现即时套利
-- **风控系统**: 完整的止损、仓位限制、冷却机制
-- **实时监控**: 订单簿深度检查、健康检查、日志记录
-- **多渠道通知**: Notion 记录 + QQ 推送
+### 1. 多路径三角套利
+- 支持 10+ 种三角套利路径
+- 自动选择最优路径
+- 价差统计和机会频率分析
 
-## 架构
+### 2. 多币种跨所套利
+- 监控 20+ 个主流币种
+- 双边持仓模式，即时套利
+- 动态阈值调整
 
-```
-arbitrage_bot/
-├── exchanges/          # 交易所封装
-│   ├── base.py        # 交易所基类
-│   ├── binance.py     # Binance 实现
-│   └── okx.py         # OKX 实现
-├── strategies/         # 套利策略
-│   ├── triangular.py  # 三角套利
-│   └── cross_exchange.py  # 跨所套利
-├── risk/              # 风控模块
-│   └── manager.py     # 风控管理器
-├── execution/         # 订单执行
-│   └── executor.py    # 订单执行器
-├── notifications/     # 通知模块
-│   ├── notion.py      # Notion 通知
-│   ├── qq.py          # QQ 通知
-│   └── manager.py     # 通知管理器
-├── utils/             # 工具模块
-│   └── logger.py      # 结构化日志
-├── config.py          # 配置管理
-└── main.py            # 主入口
-```
+### 3. 模拟交易验证
+- DRY_RUN 模式下完整模拟
+- 记录预期收益
+- 验证策略可行性
 
-## 安装
+### 4. 实时统计分析
+- 价差历史记录
+- 机会出现频率统计
+- 预期收益计算
 
+## 支持的套利路径
+
+### 三角套利路径
+- BTC-ETH-USDT
+- BTC-SOL-USDT
+- ETH-SOL-USDT
+- BTC-BNB-USDT
+- ETH-BNB-USDT
+- BTC-XRP-USDT
+- ETH-XRP-USDT
+- BTC-DOGE-USDT
+- BTC-ADA-USDT
+- ETH-ADA-USDT
+
+### 跨所套利币种
+BTC, ETH, SOL, XRP, DOGE, ADA, BNB, DOT, MATIC, LINK, LTC, BCH, ETC, AVAX, UNI, ATOM, FIL, TRX, SHIB, APT
+
+## 快速开始
+
+### 1. 克隆仓库
 ```bash
-# 克隆仓库
 git clone https://github.com/RohanKishibeCN/binance-okx-arbitrage-bot.git
 cd binance-okx-arbitrage-bot
+```
 
-# 安装依赖
+### 2. 安装依赖
+```bash
 pip install -r requirements.txt
+```
 
-# 配置环境变量
+### 3. 配置环境变量
+```bash
 cp .env.example .env
 # 编辑 .env 文件填写你的 API 密钥
 ```
 
-## 配置
-
-编辑 `.env` 文件：
-
-```env
-# 交易模式 (True=模拟, False=真实交易)
-DRY_RUN=True
-
-# API 密钥
-BINANCE_API=your_api_key
-BINANCE_SECRET=your_secret
-OKX_API=your_api_key
-OKX_SECRET=your_secret
-OKX_PASSPHRASE=your_passphrase
-
-# Notion (可选)
-NOTION_TOKEN=your_notion_token
-NOTION_DB_ID=your_database_id
-
-# Nanobot QQ 推送 (可选)
-NANOBOT_URL=http://your-server:port
-
-# 交易参数
-MIN_PROFIT=0.006              # 最小利润率 0.6%
-TRADE_AMOUNT_USDT=50          # 每笔交易金额
-TRADING_FEE_RATE=0.001        # 手续费率 0.1%
-TRADING_SLIPPAGE_BUFFER=0.002 # 滑点缓冲 0.2%
-
-# 风控参数
-RISK_MAX_DAILY_LOSS=100       # 每日最大亏损
-RISK_MAX_TRADES_PER_DAY=20    # 每日最大交易次数
+### 4. 运行（模拟模式）
+```bash
+python -m arbitrage_bot.main
 ```
 
-## 使用
+## 配置说明
 
-```bash
-# 运行机器人
-python -m arbitrage_bot.main
+### 关键配置项
+
+```env
+# 交易模式 (重要！)
+DRY_RUN=True  # True=模拟，False=真实交易
+
+# 最小利润率 (建议 0.3% - 0.8%)
+MIN_PROFIT=0.004
+
+# 每笔交易金额
+TRADE_AMOUNT_USDT=50
+
+# 风控配置
+RISK_MAX_DAILY_LOSS=200
+RISK_MAX_TRADES_PER_DAY=50
+```
+
+### 利润率设置建议
+
+| 市场情况 | 建议 MIN_PROFIT | 说明 |
+|---------|----------------|------|
+| 高波动 | 0.006 - 0.008 | 机会多，但竞争激烈 |
+| 正常 | 0.004 - 0.006 | 平衡机会和收益 |
+| 低波动 | 0.003 - 0.004 | 机会少，需要更敏感 |
+
+## 套利原理
+
+### 三角套利
+
+路径: USDT → A → B → USDT
+
+```
+毛利润 = (B/USDT 卖出价) / (A/USDT 买入价 × B/A 买入价) - 1
+净利润 = 毛利润 - 3 × 手续费 - 滑点缓冲
+```
+
+### 跨所套利
+
+双边持仓模式:
+- 在 Binance 和 OKX 都持有 USDT 和币种
+- 检测到价差后，在低价所买入，同时在高价所卖出
+- 无需等待提币，套利几乎是即时的
+
+```
+净利润 = 价差 × 交易金额 - 2 × 手续费 - 滑点缓冲
+```
+
+## 盈利策略
+
+### 1. 先跑模拟模式
+```env
+DRY_RUN=True
+MIN_PROFIT=0.004
+```
+
+运行几天，观察：
+- 机会出现频率
+- 预期收益
+- 最佳币种/路径
+
+### 2. 调整参数
+根据模拟结果调整：
+- 降低 MIN_PROFIT 增加机会
+- 增加 TRADE_AMOUNT_USDT 提高收益
+- 调整监控币种
+
+### 3. 小金额实盘
+```env
+DRY_RUN=False
+TRADE_AMOUNT_USDT=20
+MIN_PROFIT=0.005
+```
+
+### 4. 逐步增加
+确认盈利后：
+- 增加交易金额
+- 降低利润率阈值
+- 添加更多币种
+
+## 数据文件
+
+运行后会生成以下数据文件：
+
+```
+data/
+├── triangular_stats_binance.json  # Binance 三角套利统计
+├── triangular_stats_okx.json      # OKX 三角套利统计
+├── cross_exchange_stats.json      # 跨所套利统计
+├── simulated_trades_binance.json  # 模拟交易记录
+├── simulated_trades_okx.json
+├── simulated_trades_cross.json
+└── arbitrage_bot.log              # 运行日志
+```
+
+## 监控指标
+
+### 关键指标
+
+1. **机会频率**: 每小时出现多少次套利机会
+2. **成功率**: 实际成交的比例
+3. **平均利润**: 每笔交易的平均收益
+4. **最大回撤**: 单日最大亏损
+
+### 日志输出示例
+
+```
+🎯 发现三角套利机会: Binance | 路径: BTC-ETH-USDT | 利润率: 0.65% | 净利润: 0.32 USDT
+[DRY RUN] 模拟三角套利: BTC-ETH-USDT | 预期利润: 0.32 USDT | 累计模拟交易: 15
+
+📊 跨所套利统计 (Binance <-> OKX)
+  BTC/USDT      | 检查:  1250 | 机会:   23 ( 1.84%) | 最大:  0.89% | 平均:  0.12%
+  ETH/USDT      | 检查:  1250 | 机会:   18 ( 1.44%) | 最大:  0.76% | 平均:  0.08%
+  模拟总收益: 12.45 USDT (56 笔)
 ```
 
 ## 部署到 Railway
@@ -103,59 +194,43 @@ railway login
 # 链接项目
 railway link
 
+# 设置环境变量
+railway variables set DRY_RUN=True
+railway variables set BINANCE_API=your_api_key
+railway variables set BINANCE_SECRET=your_secret
+# ... 其他变量
+
 # 部署
 railway up
 ```
 
-## 套利原理
+## 常见问题
 
-### 三角套利
+### Q: 为什么 DRY_RUN 模式下看不到交易？
+A: 可能是：
+1. 利润率阈值设置太高，降低 MIN_PROFIT
+2. 市场波动小，机会本来就少
+3. API 连接有问题，检查日志
 
-路径: USDT → BTC → ETH → USDT
+### Q: 真实交易会亏损吗？
+A: 可能的原因：
+1. 滑点过大，增加 SLIPPAGE_BUFFER
+2. 执行延迟，检查服务器延迟
+3. 深度不足，增加 MIN_ORDERBOOK_DEPTH
 
-```
-毛利润 = (ETH/USDT 卖出价) / (BTC/USDT 买入价 × ETH/BTC 买入价) - 1
-净利润 = 毛利润 - 3 × 手续费 - 滑点缓冲
-```
+### Q: 如何提高收益？
+A: 建议：
+1. 增加监控币种数量
+2. 降低利润率阈值（但要小心）
+3. 增加每笔交易金额
+4. 使用更低延迟的服务器
 
-### 跨交易所套利
+## 风险提示
 
-双边持仓模式:
-- 在 Binance 和 OKX 都持有 USDT 和交易币种
-- 当价差出现时，在低价所买入，同时在高价所卖出
-- 无需等待提币，套利即时完成
-
-```
-净利润 = 价差 × 交易金额 - 2 × 手续费 - 滑点缓冲
-```
-
-## 风控机制
-
-- **每日亏损限制**: 达到限制后停止交易
-- **最大持仓限制**: 限制单笔交易金额
-- **交易次数限制**: 限制每日交易次数
-- **连续亏损冷却**: 连续亏损后进入冷却期
-- **订单簿深度检查**: 确保有足够深度成交
-
-## 日志
-
-日志文件位于 `logs/arbitrage_bot.log`，使用 JSON 格式便于分析：
-
-```json
-{
-  "timestamp": "2024-01-01T12:00:00",
-  "level": "INFO",
-  "message": "发现套利机会",
-  "profit_rate": 0.0085
-}
-```
-
-## 注意事项
-
-1. **DRY_RUN 模式**: 默认开启模拟模式，不会真实交易
-2. **API 权限**: 确保 API 密钥有交易权限
-3. **资金安全**: 建议先用小金额测试
-4. **网络稳定**: 确保服务器网络稳定，延迟低
+1. **市场风险**: 加密货币价格波动大，可能亏损
+2. **执行风险**: 网络延迟、API 故障可能导致执行失败
+3. **资金风险**: 建议先用小金额测试
+4. **交易所风险**: API 限制、维护等可能影响交易
 
 ## 许可证
 
