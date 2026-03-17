@@ -68,26 +68,18 @@ class Config:
         self.trading = TradingConfig()
         self.notification = NotificationConfig()
         
-        # 三角套利路径配置
+        # 三角套利路径配置（简化版，只保留核心路径）
         self.triangular_paths = [
             {'name': 'BTC-ETH-USDT', 'symbols': ['BTC/USDT', 'ETH/BTC', 'ETH/USDT']},
             {'name': 'BTC-SOL-USDT', 'symbols': ['BTC/USDT', 'SOL/BTC', 'SOL/USDT']},
             {'name': 'ETH-SOL-USDT', 'symbols': ['ETH/USDT', 'SOL/ETH', 'SOL/USDT']},
-            {'name': 'BTC-BNB-USDT', 'symbols': ['BTC/USDT', 'BNB/BTC', 'BNB/USDT']},
-            {'name': 'ETH-BNB-USDT', 'symbols': ['ETH/USDT', 'BNB/ETH', 'BNB/USDT']},
-            {'name': 'BTC-XRP-USDT', 'symbols': ['BTC/USDT', 'XRP/BTC', 'XRP/USDT']},
-            {'name': 'ETH-XRP-USDT', 'symbols': ['ETH/USDT', 'XRP/ETH', 'XRP/USDT']},
-            {'name': 'BTC-DOGE-USDT', 'symbols': ['BTC/USDT', 'DOGE/BTC', 'DOGE/USDT']},
-            {'name': 'BTC-ADA-USDT', 'symbols': ['BTC/USDT', 'ADA/BTC', 'ADA/USDT']},
-            {'name': 'ETH-ADA-USDT', 'symbols': ['ETH/USDT', 'ADA/ETH', 'ADA/USDT']},
         ]
         
-        # 跨交易所套利币种
+        # 跨交易所套利币种（简化版，只保留核心币种）
         self.cross_exchange_symbols = [
-            'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'DOGE/USDT',
-            'ADA/USDT', 'BNB/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT',
-            'LTC/USDT', 'BCH/USDT', 'ETC/USDT', 'AVAX/USDT', 'UNI/USDT',
-            'ATOM/USDT', 'FIL/USDT', 'TRX/USDT', 'SHIB/USDT', 'APT/USDT'
+            'BTC/USDT',
+            'ETH/USDT',
+            'SOL/USDT',
         ]
     
     def print_config(self):
