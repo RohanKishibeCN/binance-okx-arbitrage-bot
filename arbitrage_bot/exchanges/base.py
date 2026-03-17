@@ -121,14 +121,14 @@ class BaseExchange(ABC):
             ticker = await self.exchange.fetch_ticker(symbol)
             return Ticker(
                 symbol=symbol,
-                bid=float(ticker['bid']),
-                ask=float(ticker['ask']),
+                bid=float(ticker['bid']) if ticker.get('bid') else 0,
+                ask=float(ticker['ask']) if ticker.get('ask') else 0,
                 bid_volume=float(ticker.get('bidVolume', 0) or 0),
                 ask_volume=float(ticker.get('askVolume', 0) or 0),
-                timestamp=ticker['timestamp']
+                timestamp=ticker.get('timestamp', 0)
             )
         except Exception as e:
-            logger.error(f"获取 {symbol} 行情失败: {e}")
+            logger.debug(f"获取 {symbol} 行情失败: {e}")
             return None
     
     async def fetch_tickers(self, symbols: List[str]) -> Dict[str, Ticker]:
@@ -137,31 +137,57 @@ class BaseExchange(ABC):
             tickers = await self.exchange.fetch_tickers(symbols)
             result = {}
             for symbol, ticker in tickers.items():
-                result[symbol] = Ticker(
-                    symbol=symbol,
-                    bid=float(ticker['bid']),
-                    ask=float(ticker['ask']),
-                    bid_volume=float(ticker.get('bidVolume', 0) or 0),
-                    ask_volume=float(ticker.get('askVolume', 0) or 0),
-                    timestamp=ticker['timestamp']
-                )
+                try:
+                    result[symbol] = Ticker(
+                        symbol=symbol,
+                        bid=float(ticker['bid']) if ticker.get('bid') else 0,
+                        ask=float(ticker['ask']) if ticker.get('ask') else 0,
+                        bid_volume=float(ticker.get('bidVolume', 0) or 0),
+                        ask_volume=float(ticker.get('askVolume', 0) or 0),
+                        timestamp=ticker.get('timestamp', 0)
+                    )
+                except Exception as e:
+                    logger.debug(f"解析 {symbol} 行情失败: {e}")
             return result
         except Exception as e:
-            logger.error(f"获取行情失败: {e}")
+            logger.debug(f"获取行情失败: {e}")
             return {}
     
     async def fetch_order_book(self, symbol: str, limit: int = 20) -> Optional[OrderBook]:
         """获取订单簿"""
         try:
             orderbook = await self.exchange.fetch_order_book(symbol, limit)
+            
+            # 安全解析 bids 和 asks
+            bids = []
+            asks = []
+            
+            for item in orderbook.get('bids', [])[:limit]:
+                try:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        price = float(item[0])
+                        volume = float(item[1])
+                        bids.append((price, volume))
+                except (ValueError, TypeError):
+                    continue
+            
+            for item in orderbook.get('asks', [])[:limit]:
+                try:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        price = float(item[0])
+                        volume = float(item[1])
+                        asks.append((price, volume))
+                except (ValueError, TypeError):
+                    continue
+            
             return OrderBook(
                 symbol=symbol,
-                bids=[(float(p), float(v)) for p, v in orderbook['bids'][:limit]],
-                asks=[(float(p), float(v)) for p, v in orderbook['asks'][:limit]],
-                timestamp=orderbook['timestamp']
+                bids=bids,
+                asks=asks,
+                timestamp=orderbook.get('timestamp', 0)
             )
         except Exception as e:
-            logger.error(f"获取 {symbol} 订单簿失败: {e}")
+            logger.debug(f"获取 {symbol} 订单簿失败: {e}")
             return None
     
     async def fetch_balance(self) -> Dict[str, Balance]:
@@ -169,17 +195,33 @@ class BaseExchange(ABC):
         try:
             balance = await self.exchange.fetch_balance()
             result = {}
+            
+            # ccxt 返回的 balance 结构: {'BTC': {'free': 1.0, 'used': 0.0, 'total': 1.0}, ...}
             for asset, data in balance.items():
-                if isinstance(data, dict) and 'free' in data:
-                    result[asset] = Balance(
-                        asset=asset,
-                        free=float(data.get('free', 0) or 0),
-                        used=float(data.get('used', 0) or 0),
-                        total=float(data.get('total', 0) or 0)
-                    )
+                # 跳过非币种字段
+                if asset in ['info', 'timestamp', 'datetime', 'free', 'used', 'total']:
+                    continue
+                
+                if isinstance(data, dict):
+                    try:
+                        free = float(data.get('free', 0) or 0)
+                        used = float(data.get('used', 0) or 0)
+                        total = float(data.get('total', 0) or 0)
+                        
+                        # 只保留有余额的币种
+                        if total > 0:
+                            result[asset] = Balance(
+                                asset=asset,
+                                free=free,
+                                used=used,
+                                total=total
+                            )
+                    except (ValueError, TypeError):
+                        continue
+            
             return result
         except Exception as e:
-            logger.error(f"获取余额失败: {e}")
+            logger.debug(f"获取余额失败: {e}")
             return {}
     
     async def create_limit_order(
@@ -237,11 +279,29 @@ class BaseExchange(ABC):
             raise RuntimeError("WebSocket 未初始化")
         
         orderbook = await self.ws_exchange.watch_order_book(symbol)
+        
+        bids = []
+        asks = []
+        
+        for item in orderbook.get('bids', []):
+            try:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    bids.append((float(item[0]), float(item[1])))
+            except (ValueError, TypeError):
+                continue
+        
+        for item in orderbook.get('asks', []):
+            try:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    asks.append((float(item[0]), float(item[1])))
+            except (ValueError, TypeError):
+                continue
+        
         return OrderBook(
             symbol=symbol,
-            bids=[(float(p), float(v)) for p, v in orderbook['bids']],
-            asks=[(float(p), float(v)) for p, v in orderbook['asks']],
-            timestamp=orderbook['timestamp']
+            bids=bids,
+            asks=asks,
+            timestamp=orderbook.get('timestamp', 0)
         )
     
     async def watch_ticker(self, symbol: str) -> Ticker:
@@ -252,11 +312,11 @@ class BaseExchange(ABC):
         ticker = await self.ws_exchange.watch_ticker(symbol)
         return Ticker(
             symbol=symbol,
-            bid=float(ticker['bid']),
-            ask=float(ticker['ask']),
+            bid=float(ticker['bid']) if ticker.get('bid') else 0,
+            ask=float(ticker['ask']) if ticker.get('ask') else 0,
             bid_volume=float(ticker.get('bidVolume', 0) or 0),
             ask_volume=float(ticker.get('askVolume', 0) or 0),
-            timestamp=ticker['timestamp']
+            timestamp=ticker.get('timestamp', 0)
         )
     
     def is_connected(self) -> bool:
