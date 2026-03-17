@@ -4,7 +4,8 @@
 
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, Field, validator
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 
 def get_env(key: str, default: any = None) -> any:
