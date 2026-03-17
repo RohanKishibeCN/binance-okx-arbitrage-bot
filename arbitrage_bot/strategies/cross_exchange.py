@@ -88,26 +88,6 @@ class SymbolSpreadStats:
 class CrossExchangeArbitrage:
     """跨交易所套利策略 - 优化版本"""
     
-    # 默认监控的币种列表
-    DEFAULT_SYMBOLS = [
-        'BTC/USDT',
-        'ETH/USDT',
-        'SOL/USDT',
-        'XRP/USDT',
-        'DOGE/USDT',
-        'ADA/USDT',
-        'BNB/USDT',
-        'DOT/USDT',
-        'MATIC/USDT',
-        'LINK/USDT',
-        'LTC/USDT',
-        'BCH/USDT',
-        'ETC/USDT',
-        'AVAX/USDT',
-        'UNI/USDT',
-        'ATOM/USDT'
-    ]
-    
     def __init__(
         self,
         exchange1: BaseExchange,
@@ -172,13 +152,13 @@ class CrossExchangeArbitrage:
     async def run(self, symbols: List[str] = None):
         """主循环"""
         from ..config import config as global_config
-        symbols = symbols or self.DEFAULT_SYMBOLS
+        symbols = symbols or global_config.cross_exchange_symbols
         
         logger.info(
             f"跨交易所套利策略已启动: {self.exchange1.name} <-> {self.exchange2.name}"
         )
         logger.info(f"监控币种数: {len(symbols)}")
-        logger.info(f"监控币种: {', '.join(symbols[:5])}...")
+        logger.info(f"监控币种: {', '.join(symbols)}")
         
         # 初始化持仓
         await self._initialize_positions()
@@ -241,22 +221,35 @@ class CrossExchangeArbitrage:
     async def _initialize_positions(self):
         """初始化双边持仓"""
         try:
+            # 获取两个交易所的余额
             balance1 = await self.exchange1.fetch_balance()
             balance2 = await self.exchange2.fetch_balance()
             
             # 计算总持仓价值
-            total_usdt = (
-                balance1.get('USDT', type('Balance', (), {'free': 0})()).free +
-                balance2.get('USDT', type('Balance', (), {'free': 0})()).free
-            )
+            usdt1 = balance1.get('USDT')
+            usdt2 = balance2.get('USDT')
+            
+            usdt1_free = usdt1.free if usdt1 else 0
+            usdt2_free = usdt2.free if usdt2 else 0
+            
+            btc1 = balance1.get('BTC')
+            btc2 = balance2.get('BTC')
+            eth1 = balance1.get('ETH')
+            eth2 = balance2.get('ETH')
+            sol1 = balance1.get('SOL')
+            sol2 = balance2.get('SOL')
             
             logger.info(
                 f"持仓初始化完成:\n"
-                f"  {self.exchange1.name}: USDT={balance1.get('USDT', {}).free:.2f}, "
-                f"BTC={balance1.get('BTC', {}).free:.4f}, ETH={balance1.get('ETH', {}).free:.4f}\n"
-                f"  {self.exchange2.name}: USDT={balance2.get('USDT', {}).free:.2f}, "
-                f"BTC={balance2.get('BTC', {}).free:.4f}, ETH={balance2.get('ETH', {}).free:.4f}\n"
-                f"  总 USDT: {total_usdt:.2f}"
+                f"  {self.exchange1.name}: USDT={usdt1_free:.2f}, "
+                f"BTC={btc1.free if btc1 else 0:.4f}, "
+                f"ETH={eth1.free if eth1 else 0:.4f}, "
+                f"SOL={sol1.free if sol1 else 0:.4f}\n"
+                f"  {self.exchange2.name}: USDT={usdt2_free:.2f}, "
+                f"BTC={btc2.free if btc2 else 0:.4f}, "
+                f"ETH={eth2.free if eth2 else 0:.4f}, "
+                f"SOL={sol2.free if sol2 else 0:.4f}\n"
+                f"  总 USDT: {usdt1_free + usdt2_free:.2f}"
             )
             
         except Exception as e:
@@ -512,7 +505,7 @@ class CrossExchangeArbitrage:
             reverse=True
         )
         
-        for symbol, stats in sorted_stats[:10]:  # 只显示前10
+        for symbol, stats in sorted_stats:
             total_checks += stats.count
             total_opportunities += stats.profitable_count
             
@@ -532,7 +525,7 @@ class CrossExchangeArbitrage:
             overall_rate = total_opportunities / total_checks * 100
             logger.info("-" * 80)
             logger.info(
-                f"  {'总计 (前10)':12} | "
+                f"  {'总计':12} | "
                 f"检查: {total_checks:5} | "
                 f"机会: {total_opportunities:4} ({overall_rate:5.2f}%)"
             )
