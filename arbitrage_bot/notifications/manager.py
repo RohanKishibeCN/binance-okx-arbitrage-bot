@@ -82,6 +82,37 @@ class NotificationManager:
             logger.error(f"发送给 nanobot 失败: {e}")
             return None
 
+    async def write_trade(self, trade_type: str, content: str, profit: float = 0, 
+                         exchange: str = "", extra_data: Optional[Dict] = None):
+        """写入交易记录到 Notion"""
+        if not self.notion or not self.notion_db_id:
+            logger.warning("Notion 未配置，跳过写入")
+            return False
+            
+        try:
+            properties = {
+                "Type": {"select": {"name": trade_type}},
+                "Content": {"rich_text": [{"text": {"content": content[:2000]}}]},
+                "Profit": {"number": float(profit)},
+                "Exchange": {"select": {"name": exchange or "Unknown"}},
+                "Date": {"date": {"start": datetime.now().isoformat()}}
+            }
+            
+            if extra_data:
+                extra_str = "\n".join([f"{k}: {v}" for k, v in extra_data.items()])
+                properties["Content"]["rich_text"][0]["text"]["content"] += f"\n\n{extra_str}"
+            
+            self.notion.pages.create(
+                parent={"database_id": self.notion_db_id},
+                properties=properties
+            )
+            logger.info(f"✅ 交易记录已写入 Notion: {trade_type}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"写入 Notion 交易记录失败: {e}")
+            return False
+
     async def write_summary_to_notion(self, summary_text: str, date_str: str):
         """把总结回写到 Notion"""
         if not self.notion or not self.notion_db_id:
@@ -104,33 +135,3 @@ class NotificationManager:
         except Exception as e:
             logger.error(f"回写 Notion 总结失败: {e}")
             return False
-
-    async def write_trade(self, trade_type: str, content: str, profit: float = 0, exchange: str = "", extra_data: Optional[Dict] = None):
-        """写入交易记录到 Notion"""
-        if not self.notion or not self.notion_db_id:
-            logger.warning("Notion 未配置，跳过写入")
-            return False
-        
-        try:
-            properties = {
-                "Type": {"select": {"name": trade_type}},
-                "Content": {"rich_text": [{"text": {"content": content[:2000]}}]},
-                "Profit": {"number": float(profit)},
-                "Exchange": {"select": {"name": exchange or "Unknown"}},
-                "Date": {"date": {"start": datetime.now().isoformat()}}
-            }
-        
-            if extra_data:
-                extra_str = "\n".join([f"{k}: {v}" for k, v in extra_data.items()])
-                properties["Content"]["rich_text"][0]["text"]["content"] += f"\n\n{extra_str}"
-        
-            self.notion.pages.create(
-                parent={"database_id": self.notion_db_id},
-                properties=properties
-            )
-            logger.info(f"✅ 交易记录已写入 Notion: {trade_type}")
-            return True
-        
-    except Exception as e:
-        logger.error(f"写入 Notion 交易记录失败: {e}")
-        return False
