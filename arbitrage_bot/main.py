@@ -190,10 +190,14 @@ class ArbitrageBot:
                         logger.info("📊 开始生成每日分析总结...")
                         try:
                             yesterday = (datetime.now() - timedelta(days=1)).date()
-                            records = self._collect_trade_records(str(yesterday))
-                            await self._send_daily_analysis(str(yesterday), records)
+                            yesterday_str = str(yesterday)
+                            records = self._collect_trade_records(yesterday_str)
+                            # 关键修复：传入两个参数！
+                            await self._send_daily_analysis(yesterday_str, records)
                         except Exception as e:
-                            logger.error(f"生成每日分析失败: {e}")
+                            logger.error(f"生成每日分析失败: {e}", exc_info=True)
+                            # 出错后重置标记，下次还会尝试
+                            self.daily_analysis_sent = None
                 
                 await asyncio.sleep(60)
                 
@@ -214,13 +218,13 @@ class ArbitrageBot:
             content = self._format_trade_records(records, yesterday)
             
             # 发送到 Notion（修复：write_trade 方法不存在，改用 send_to_nanobot 或直接跳过）
-            # await self.notification_manager.notion.write_trade(
-            #     trade_type="每日交易记录",
-            #     content=content,
-            #     profit=records['total_profit'],
-            #     exchange="Summary",
-            #     extra_data={'date': date_str}
-            # )
+            await self.notification_manager.write_trade(
+                trade_type="每日交易记录",
+                content=content,
+                profit=records['total_profit'],
+                exchange="Summary",
+                extra_data={'date': date_str}
+            )
             logger.info(f"每日交易记录已准备: {date_str}, 利润: {records['total_profit']}")
 
             # 推送到 Lark
@@ -243,7 +247,15 @@ class ArbitrageBot:
             records_json = json.dumps(records, ensure_ascii=False, indent=2, default=str)
         except Exception as e:
             logger.error(f"序列化交易记录失败: {e}")
-            records_json = str(records)  # 如果失败就简单转字符串
+            # 如果失败，简化数据
+            simple_records = {
+                'date': yesterday,
+                'total_trades': records.get('total_trades', 0),
+                'total_profit': records.get('total_profit', 0),
+                'trades_count': len(records.get('trades', []))
+            }
+            records_json = json.dumps(simple_records, ensure_ascii=False, indent=2)
+            
         # 假设你已经有 records 汇总文本
         summary_prompt = f"""
         以下是昨日 ({yesterday}) 的交易记录汇总，请用中文生成一份简洁、专业、带标题和表情的每日总结报告：
