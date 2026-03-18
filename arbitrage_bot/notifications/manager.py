@@ -10,12 +10,22 @@ class NotificationManager:
         self.nanobot_url = os.getenv('NANOBOT_URL')
         logger.info("通知管理器初始化完成（已切换到 Lark）")
 
+    async def initialize(self):
+        """兼容主程序调用的初始化方法（空实现）"""
+        logger.info("NotificationManager 初始化完成")
+        return True
+
+    async def close(self):
+        """兼容主程序调用的关闭方法（空实现）"""
+        logger.info("NotificationManager 已关闭")
+        return True
+
     async def _trigger_lark(self, message: str):
         """统一推送到 Lark（通过 nanobot）"""
         try:
             import requests
             if not self.nanobot_url:
-                logger.warning("NANOBOT_URL 未配置")
+                logger.warning("NANOBOT_URL 未配置，无法推送 Lark")
                 return
             
             payload = {
@@ -34,5 +44,5 @@ class NotificationManager:
             logger.error(f"Lark 推送失败: {e}")
 
     async def test_connections(self) -> dict:
-        """测试连接（占位函数）"""
+        """测试连接（占位）"""
         return {"lark": True, "nanobot_url": bool(self.nanobot_url)}
