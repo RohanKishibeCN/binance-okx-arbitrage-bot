@@ -25,6 +25,29 @@ logger = get_logger(__name__)
 
 class ArbitrageBot:
     """套利机器人"""
+    async def _trigger_lark(self, message: str):
+        """统一推送到 Lark（通过 nanobot）"""
+        try:
+            import requests
+            nanobot_url = os.getenv('NANOBOT_URL')
+            if not nanobot_url:
+                logger.warning("NANOBOT_URL 未配置，无法推送 Lark")
+                return
+            
+            payload = {
+                "prompt": f"请用中文美化并推送到 Lark 单聊：\n{message}\n添加标题和表情🚀"
+            }
+            
+            response = requests.post(
+                f"{nanobot_url}/trigger",
+                json=payload,
+                timeout=10
+            )
+            response.raise_for_status()
+            logger.info("✅ 已成功推送到 Lark")
+            
+        except Exception as e:
+            logger.error(f"Lark 推送失败: {e}")
     
     def __init__(self):
         self.binance: BinanceExchange = None
@@ -165,7 +188,9 @@ class ArbitrageBot:
                     if self.daily_analysis_sent != today:
                         self.daily_analysis_sent = today
                         logger.info("📊 开始生成每日分析总结...")
-                        await self._send_daily_analysis()
+                        yesterday = (datetime.now() - timedelta(days=1)).date()
+                        records = self._collect_trade_records(str(yesterday))
+                        await self._send_daily_analysis(str(yesterday), records)
                 
                 await asyncio.sleep(60)
                 
@@ -510,29 +535,6 @@ async def main():
         await bot.stop()
         sys.exit(1)
 
-    async def _trigger_lark(self, message: str):
-        """统一推送到 Lark（通过 nanobot）"""
-        try:
-            import requests
-            nanobot_url = os.getenv('NANOBOT_URL')
-            if not nanobot_url:
-                logger.warning("NANOBOT_URL 未配置，无法推送 Lark")
-                return
-            
-            payload = {
-                "prompt": f"请用中文美化并推送到 Lark 单聊：\n{message}\n添加标题和表情🚀"
-            }
-            
-            response = requests.post(
-                f"{nanobot_url}/trigger",
-                json=payload,
-                timeout=10
-            )
-            response.raise_for_status()
-            logger.info("✅ 已成功推送到 Lark")
-            
-        except Exception as e:
-            logger.error(f"Lark 推送失败: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
