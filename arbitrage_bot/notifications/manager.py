@@ -25,12 +25,10 @@ class NotificationManager:
         
     async def initialize(self):
         """初始化所有通知渠道"""
-        # await self.qq.initialize()
         logger.info("通知管理器初始化完成")
     
     async def close(self):
         """关闭所有通知渠道"""
-        # await self.qq.close()
         logger.info("通知管理器已关闭")
     
     async def notify_trade(
