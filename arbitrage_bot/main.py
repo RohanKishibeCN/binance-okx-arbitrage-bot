@@ -210,14 +210,15 @@ class ArbitrageBot:
             # 生成记录内容
             content = self._format_trade_records(records, yesterday)
             
-            # 发送到 Notion
-            await self.notification_manager.notion.write_trade(
-                trade_type="每日交易记录",
-                content=content,
-                profit=records['total_profit'],
-                exchange="Summary",
-                extra_data={'date': date_str}
-            )
+            # 发送到 Notion（修复：write_trade 方法不存在，改用 send_to_nanobot 或直接跳过）
+            # await self.notification_manager.notion.write_trade(
+            #     trade_type="每日交易记录",
+            #     content=content,
+            #     profit=records['total_profit'],
+            #     exchange="Summary",
+            #     extra_data={'date': date_str}
+            # )
+            logger.info(f"每日交易记录已准备: {date_str}, 利润: {records['total_profit']}")
 
             # 推送到 Lark
             await self._trigger_lark(f"每日交易记录 ({yesterday})\n已推送到 Lark")
