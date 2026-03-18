@@ -30,7 +30,8 @@ class ArbitrageBot:
         self.okx: OKXExchange = None
         self.risk_manager: RiskManager = None
         self.notification_manager: NotificationManager = None
-        
+        # 添加这一行（初始化 Notion client）
+        self.notion_client = Client(auth=os.getenv('NOTION_TOKEN'))
         self.tasks: List[asyncio.Task] = []
         self.running = False
         
