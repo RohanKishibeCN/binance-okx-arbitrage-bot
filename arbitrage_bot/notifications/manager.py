@@ -1,48 +1,61 @@
 import os
 import logging
+import requests
 from typing import Dict
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 class NotificationManager:
-    def __init__(self):
-        """只保留 nanobot（Lark）推送"""
+    def __init__(self, notion_client=None):
         self.nanobot_url = os.getenv('NANOBOT_URL')
-        logger.info("通知管理器初始化完成（已切换到 Lark）")
+        self.notion = notion_client  # 传入 Notion client，供回写总结用
+        logger.info("通知管理器初始化完成（Lark + Notion）")
 
     async def initialize(self):
-        """兼容主程序调用的初始化方法（空实现）"""
         logger.info("NotificationManager 初始化完成")
         return True
 
     async def close(self):
-        """兼容主程序调用的关闭方法（空实现）"""
         logger.info("NotificationManager 已关闭")
         return True
 
-    async def _trigger_lark(self, message: str):
-        """统一推送到 Lark（通过 nanobot）"""
+    async def send_to_nanobot(self, prompt: str):
+        """发送给 nanobot 处理（生成总结并推 Lark）"""
+        if not self.nanobot_url:
+            logger.warning("NANOBOT_URL 未配置")
+            return None
+
         try:
-            import requests
-            if not self.nanobot_url:
-                logger.warning("NANOBOT_URL 未配置，无法推送 Lark")
-                return
-            
-            payload = {
-                "prompt": f"请用中文美化并推送到 Lark 单聊：\n{message}\n添加标题和表情🚀"
-            }
-            
             response = requests.post(
                 f"{self.nanobot_url}/trigger",
-                json=payload,
-                timeout=10
+                json={"prompt": prompt},
+                timeout=15
             )
             response.raise_for_status()
-            logger.info("✅ 已成功推送到 Lark")
-            
+            logger.info("✅ 已成功发送给 nanobot")
+            return response.json() if response.headers.get('content-type') == 'application/json' else response.text
         except Exception as e:
-            logger.error(f"Lark 推送失败: {e}")
+            logger.error(f"发送给 nanobot 失败: {e}")
+            return None
 
-    async def test_connections(self) -> dict:
-        """测试连接（占位）"""
-        return {"lark": True, "nanobot_url": bool(self.nanobot_url)}
+    async def write_summary_to_notion(self, summary_text: str, date_str: str):
+        """把 nanobot 生成的总结回写到 Notion"""
+        if not self.notion:
+            logger.warning("Notion client 未传入，无法回写总结")
+            return
+
+        try:
+            self.notion.pages.create(
+                parent={"database_id": os.getenv('NOTION_DB_ID')},
+                properties={
+                    "Date": {"date": {"start": date_str}},
+                    "Type": {"select": {"name": "每日总结"}},
+                    "Content": {"rich_text": [{"text": {"content": summary_text}}]},
+                    "Profit": {"number": 0},  # 可后续填充
+                    "Exchange": {"select": {"name": "Summary"}}
+                }
+            )
+            logger.info("每日总结已回写到 Notion")
+        except Exception as e:
+            logger.error(f"回写 Notion 总结失败: {e}")
