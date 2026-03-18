@@ -7,6 +7,7 @@ import signal
 import sys
 import os
 import json
+from notion_client import Client
 from datetime import datetime, timedelta
 from typing import List, Dict
 
