@@ -37,9 +37,11 @@ class ArbitrageBot:
             payload = {
                 "prompt": f"请用中文美化并推送到 Lark 单聊：\n{message}\n添加标题和表情🚀"
             }
-            
+
+            # 修复：去掉 nanobot_url 末尾的斜杠，避免双斜杠
+            url = nanobot_url.rstrip('/') + "/trigger"
             response = requests.post(
-                f"{nanobot_url}/trigger",
+                url,
                 json=payload,
                 timeout=10
             )
@@ -175,16 +177,14 @@ class ArbitrageBot:
                 today = now.date()
                 
                 # 早上 8:00 推送交易记录
-                #if now.hour == 8 and now.minute == 0:
-                if True:
+                if now.hour == 8 and now.minute == 0:
                     if self.daily_records_sent != today:
                         self.daily_records_sent = today
                         logger.info("📋 开始生成每日交易记录...")
                         await self._send_daily_records()
                 
                 # 早上 9:00 推送分析总结（由 nanobot 生成）
-                #if now.hour == 9 and now.minute == 0:
-                if True:
+                if now.hour == 9 and now.minute == 0:
                     if self.daily_analysis_sent != today:
                         self.daily_analysis_sent = today
                         logger.info("📊 开始生成每日分析总结...")
