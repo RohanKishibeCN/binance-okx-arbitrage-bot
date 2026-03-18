@@ -150,14 +150,16 @@ class ArbitrageBot:
                 today = now.date()
                 
                 # 早上 8:00 推送交易记录
-                if now.hour == 8 and now.minute == 0:
+                #if now.hour == 8 and now.minute == 0:
+                if True:
                     if self.daily_records_sent != today:
                         self.daily_records_sent = today
                         logger.info("📋 开始生成每日交易记录...")
                         await self._send_daily_records()
                 
                 # 早上 9:00 推送分析总结（由 nanobot 生成）
-                if now.hour == 9 and now.minute == 0:
+                #if now.hour == 9 and now.minute == 0:
+                if True:
                     if self.daily_analysis_sent != today:
                         self.daily_analysis_sent = today
                         logger.info("📊 开始生成每日分析总结...")
