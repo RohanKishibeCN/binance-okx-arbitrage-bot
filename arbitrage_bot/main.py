@@ -188,9 +188,12 @@ class ArbitrageBot:
                     if self.daily_analysis_sent != today:
                         self.daily_analysis_sent = today
                         logger.info("📊 开始生成每日分析总结...")
-                        yesterday = (datetime.now() - timedelta(days=1)).date()
-                        records = self._collect_trade_records(str(yesterday))
-                        await self._send_daily_analysis(str(yesterday), records)
+                        try:
+                            yesterday = (datetime.now() - timedelta(days=1)).date()
+                            records = self._collect_trade_records(str(yesterday))
+                            await self._send_daily_analysis(str(yesterday), records)
+                        except Exception as e:
+                            logger.error(f"生成每日分析失败: {e}")
                 
                 await asyncio.sleep(60)
                 
@@ -234,10 +237,17 @@ class ArbitrageBot:
         yesterday = (datetime.now() - timedelta(days=1)).date()
         records = self._collect_trade_records(str(yesterday))
         await self._send_daily_analysis(str(yesterday), records)
+
+        # 安全地序列化 records，防止递归错误
+        try:
+            records_json = json.dumps(records, ensure_ascii=False, indent=2, default=str)
+        except Exception as e:
+            logger.error(f"序列化交易记录失败: {e}")
+            records_json = str(records)  # 如果失败就简单转字符串
         # 假设你已经有 records 汇总文本
         summary_prompt = f"""
         以下是昨日 ({yesterday}) 的交易记录汇总，请用中文生成一份简洁、专业、带标题和表情的每日总结报告：
-        {json.dumps(records, ensure_ascii=False, indent=2)}
+        {records_json}
         总结内容包括：总交易笔数、总利润、主要币种表现、风险提示。
         """
 
