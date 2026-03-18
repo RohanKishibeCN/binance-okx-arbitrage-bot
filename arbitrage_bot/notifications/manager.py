@@ -3,6 +3,8 @@ import logging
 import requests
 from typing import Dict
 from datetime import datetime
+# manager.py 文件顶部添加
+from notion_client import Client
 
 logger = logging.getLogger(__name__)
 
