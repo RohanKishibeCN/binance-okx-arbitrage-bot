@@ -204,6 +204,10 @@ class ArbitrageBot:
     
     async def _send_daily_analysis(self, yesterday: str, records: list):
         """生成每日分析总结，并推 Lark + 回写 Notion"""
+        # 需要先获取 yesterday 和 records 再传进去
+        yesterday = (datetime.now() - timedelta(days=1)).date()
+        records = self._collect_trade_records(str(yesterday))
+        await self._send_daily_analysis(str(yesterday), records)
         # 假设你已经有 records 汇总文本
         summary_prompt = f"""
         以下是昨日 ({yesterday}) 的交易记录汇总，请用中文生成一份简洁、专业、带标题和表情的每日总结报告：
