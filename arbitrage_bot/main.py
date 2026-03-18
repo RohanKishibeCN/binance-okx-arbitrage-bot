@@ -193,7 +193,7 @@ class ArbitrageBot:
             )
 
             # 推送到 Lark
-            await self._trigger_lark(f"每日交易记录 ({yesterday})\n已推送到 Notion")
+            await self._trigger_lark(f"每日交易记录 ({yesterday})\n已推送到 Lark")
             
             logger.info(f"✅ 每日交易记录已发送 ({yesterday})")
             
