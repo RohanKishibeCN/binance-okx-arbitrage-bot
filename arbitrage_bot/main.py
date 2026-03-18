@@ -189,11 +189,9 @@ class ArbitrageBot:
                 exchange="Summary",
                 extra_data={'date': date_str}
             )
-            
-            # 同时发送到 QQ
-            await self.notification_manager.qq.send_message(
-                f"📋 每日交易记录 ({yesterday})\n已推送到 Notion"
-            )
+
+            # 推送到 Lark
+            await self._trigger_lark(f"每日交易记录 ({yesterday})\n已推送到 Notion")
             
             logger.info(f"✅ 每日交易记录已发送 ({yesterday})")
             
@@ -211,11 +209,9 @@ class ArbitrageBot:
             
             # 生成分析提示词
             analysis_prompt = self._generate_analysis_prompt(records, yesterday)
-            
-            # 通过 nanobot 生成分析并推送到 Notion
-            await self.notification_manager.qq.send_message(
-                f"📊 每日分析总结 ({yesterday})\n正在生成分析报告..."
-            )
+
+            # 推送到 Lark
+            await self._trigger_lark(f"每日分析总结 ({yesterday})\n正在生成分析报告...")
             
             # 调用 nanobot 生成分析
             await self._call_nanobot_for_analysis(analysis_prompt, yesterday)
@@ -502,6 +498,29 @@ async def main():
         await bot.stop()
         sys.exit(1)
 
+    async def _trigger_lark(self, message: str):
+        """统一推送到 Lark（通过 nanobot）"""
+        try:
+            import requests
+            nanobot_url = os.getenv('NANOBOT_URL')
+            if not nanobot_url:
+                logger.warning("NANOBOT_URL 未配置，无法推送 Lark")
+                return
+            
+            payload = {
+                "prompt": f"请用中文美化并推送到 Lark 单聊：\n{message}\n添加标题和表情🚀"
+            }
+            
+            response = requests.post(
+                f"{nanobot_url}/trigger",
+                json=payload,
+                timeout=10
+            )
+            response.raise_for_status()
+            logger.info("✅ 已成功推送到 Lark")
+            
+        except Exception as e:
+            logger.error(f"Lark 推送失败: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
