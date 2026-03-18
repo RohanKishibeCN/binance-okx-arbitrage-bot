@@ -18,13 +18,10 @@ logger = get_logger(__name__)
 class NotificationManager:
     """通知管理器"""
     
-    def __init__(self, config: NotificationConfig = None):
-        from ..config import config as global_config
-        self.config = config or global_config.notification
-        
-        self.notion = NotionNotifier(self.config)
-        self.lark = None
+    def __init__(self):
+        """初始化通知管理器（只保留 Lark/nanobot）"""
         self.nanobot_url = os.getenv('NANOBOT_URL')
+        logger.info("通知管理器初始化完成（已切换到 Lark）")
         
     async def initialize(self):
         """初始化所有通知渠道"""
