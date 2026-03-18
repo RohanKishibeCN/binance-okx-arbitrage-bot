@@ -9,7 +9,7 @@ from notion_client import Client
 logger = logging.getLogger(__name__)
 
 class NotificationManager:
-    def __init__(self):
+    def __init__(self, notion_client=None):
         self.nanobot_url = os.getenv('NANOBOT_URL')
         self.notion = Client(auth=os.getenv('NOTION_TOKEN'))  # 自己初始化 Notion
         logger.info("通知管理器初始化完成（Lark + Notion）")
