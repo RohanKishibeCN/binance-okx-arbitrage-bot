@@ -65,7 +65,7 @@ class ArbitrageBot:
         
         # 初始化通知
         logger.info("\n📢 初始化通知系统...")
-        self.notification_manager = NotificationManager()
+        self.notification_manager = NotificationManager(notion_client=self.notion_client)
         await self.notification_manager.initialize()
         
         # 测试通知连接
@@ -200,28 +200,32 @@ class ArbitrageBot:
         except Exception as e:
             logger.error(f"发送每日交易记录失败: {e}")
     
-    async def _send_daily_analysis(self):
-        """发送每日分析总结（9点，由 nanobot 生成）"""
-        try:
-            yesterday = (datetime.now() - timedelta(days=1)).date()
-            date_str = str(yesterday)
-            
-            # 收集交易记录
-            records = self._collect_trade_records(date_str)
-            
-            # 生成分析提示词
-            analysis_prompt = self._generate_analysis_prompt(records, yesterday)
+    async def _send_daily_analysis(self, yesterday: str, records: list):
+        """生成每日分析总结，并推 Lark + 回写 Notion"""
+        # 假设你已经有 records 汇总文本
+        summary_prompt = f"""
+        以下是昨日 ({yesterday}) 的交易记录汇总，请用中文生成一份简洁、专业、带标题和表情的每日总结报告：
+        {json.dumps(records, ensure_ascii=False, indent=2)}
+        总结内容包括：总交易笔数、总利润、主要币种表现、风险提示。
+        """
 
-            # 推送到 Lark
-            await self._trigger_lark(f"每日分析总结 ({yesterday})\n正在生成分析报告...")
+        # 发送给 nanobot
+        nanobot_response = await self.notification_manager.send_to_nanobot(summary_prompt)
+        
+        if nanobot_response:
+            # 假设 nanobot 返回的是生成的总结文本（根据实际返回调整）
+            generated_summary = nanobot_response.get('result', str(nanobot_response))
             
-            # 调用 nanobot 生成分析
-            await self._call_nanobot_for_analysis(analysis_prompt, yesterday)
-            
-            logger.info(f"✅ 每日分析总结已发送 ({yesterday})")
-            
-        except Exception as e:
-            logger.error(f"发送每日分析总结失败: {e}")
+            # 推送到 Lark（nanobot 已处理）
+            logger.info(f"Lark 总结已推送：{generated_summary[:100]}...")
+
+            # 回写到 Notion
+            await self.notification_manager.write_summary_to_notion(
+                generated_summary,
+                yesterday
+            )
+        else:
+            logger.warning("nanobot 未返回总结，无法回写 Notion")
     
     def _collect_trade_records(self, date_str: str) -> Dict:
         """收集指定日期的交易记录"""
