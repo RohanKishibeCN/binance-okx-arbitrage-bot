@@ -35,21 +35,36 @@ class CrossExchangeArbitrage:
         
         # 分层币种列表
         tier1_symbols = ['SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'MATIC/USDT', 'LINK/USDT']
-        tier2_symbols = ['UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT']
-        tier3_symbols = ['NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT', 'JTO/USDT', 'WLD/USDT']
+        # tier2_symbols = ['UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT']
+        # tier3_symbols = ['NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT', 'JTO/USDT', 'WLD/USDT']
         
         iteration = 0
         
         while self.running:
             try:
                 iteration += 1
+                logger.info(f"🔄 第 {iteration} 轮检查开始...")
                 
                 # Tier 1: 高频检查（每轮都查）
                 for symbol in tier1_symbols:
                     if not self.running:
                         break
-                    await self.check_opportunity(symbol)
+                    logger.info(f"  检查 {symbol}...")
+                    
+                    # 添加5秒超时，防止卡住
+                    try:
+                        await asyncio.wait_for(
+                            self.check_opportunity(symbol), 
+                            timeout=5.0
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(f"  {symbol} 检查超时，跳过")
+                        continue
+                        
                     await asyncio.sleep(0.1)
+                
+                logger.info(f"✅ 第 {iteration} 轮完成，等待下一轮...")
+                await asyncio.sleep(1)  # 每轮间隔1秒
                 
                 # Tier 2: 中频检查（每2轮）
                 if iteration % 2 == 0:
@@ -74,12 +89,14 @@ class CrossExchangeArbitrage:
                 await asyncio.sleep(0.05)
                 
             except Exception as e:
-                logger.error(f"跨所套利循环错误: {e}")
-                await asyncio.sleep(1)
+                logger.error(f"❌ 跨所套利循环错误: {e}", exc_info=True)
+                await asyncio.sleep(5)
 
     async def check_opportunity(self, symbol: str):
-        """检查特定币种的套利机会"""
+        """检查套利机会 - 增强日志"""
         try:
+            logger.debug(f"开始获取 {symbol} 订单簿...")
+            
             # 并行获取两个交易所数据
             binance_data, okx_data = await asyncio.gather(
                 self._get_exchange_data(self.binance, symbol),
@@ -87,8 +104,14 @@ class CrossExchangeArbitrage:
                 return_exceptions=True
             )
             
-            if isinstance(binance_data, Exception) or isinstance(okx_data, Exception):
+            if isinstance(binance_data, Exception):
+                logger.warning(f"Binance {symbol} 数据获取失败: {binance_data}")
                 return
+            if isinstance(okx_data, Exception):
+                logger.warning(f"OKX {symbol} 数据获取失败: {okx_data}")
+                return
+                
+            logger.debug(f"{symbol} 数据获取成功，计算价差...")
             
             # 计算真实价格（考虑深度）
             binance_buy = self._calculate_real_price(binance_data, 'buy')
