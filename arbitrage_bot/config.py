@@ -55,7 +55,7 @@ class Config:
 
         # 跨交易所套利币种（优化后的非主流币列表）
         self.cross_exchange_symbols = [
-            'SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'MATIC/USDT', 'LINK/USDT',
+            'SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'POL/USDT', 'LINK/USDT',
             'UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT',
             'NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT',
             'JTO/USDT', 'WLD/USDT', 'ARKM/USDT', 'BTC/USDT', 'ETH/USDT',
