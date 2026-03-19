@@ -11,7 +11,6 @@ from notion_client import Client
 from datetime import datetime, timedelta
 from typing import List, Dict
 
-from .analyzer import DailyAnalyzer
 from .config import config
 from .exchanges import BinanceExchange, OKXExchange
 from .strategies import TriangularArbitrage, CrossExchangeArbitrage
@@ -37,8 +36,6 @@ class ArbitrageBot:
         self.tasks: List[asyncio.Task] = []
         self.running = False
         
-        # 添加每日分析器
-        self.analyzer = DailyAnalyzer()  
         
         # 记录推送状态
         self.daily_records_sent: datetime = None  # 8点交易记录
