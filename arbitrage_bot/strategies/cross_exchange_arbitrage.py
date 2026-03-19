@@ -145,15 +145,26 @@ class CrossExchangeArbitrage:
         """获取交易所数据 - 修复 OrderBook 对象处理"""
         try:
             orderbook = await exchange.fetch_order_book(symbol, limit=20)
+
+            # 防御：检查返回是否为 None
+            if orderbook is None:
+                raise ValueError(f"{symbol} 订单簿返回 None")
             
             # 处理 OrderBook 对象（可能是对象或字典）
             if hasattr(orderbook, 'bids') and hasattr(orderbook, 'asks'):
+                # 检查 bids/asks 是否为 None
+                if orderbook.bids is None or orderbook.asks is None:
+                    raise ValueError(f"{symbol} bids/asks 为 None")
+                    
                 return {
                     'bids': orderbook.bids,
                     'asks': orderbook.asks,
                     'timestamp': getattr(orderbook, 'timestamp', None)
                 }
             else:
+                if orderbook['bids'] is None or orderbook['asks'] is None:
+                    raise ValueError(f"{symbol} bids/asks 为 None")
+                    
                 return {
                     'bids': orderbook['bids'],
                     'asks': orderbook['asks'],
