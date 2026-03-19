@@ -26,31 +26,6 @@ logger = get_logger(__name__)
 
 class ArbitrageBot:
     """套利机器人"""
-    async def _trigger_lark(self, message: str):
-        """统一推送到 Lark（通过 nanobot）"""
-        try:
-            import requests
-            nanobot_url = os.getenv('NANOBOT_URL')
-            if not nanobot_url:
-                logger.warning("NANOBOT_URL 未配置，无法推送 Lark")
-                return
-            
-            payload = {
-                "prompt": f"请用中文美化并推送到 Lark 单聊：\n{message}\n添加标题和表情🚀"
-            }
-
-            # 修复：去掉 nanobot_url 末尾的斜杠，避免双斜杠
-            url = nanobot_url.rstrip('/') + "/trigger"
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=10
-            )
-            response.raise_for_status()
-            logger.info("✅ 已成功推送到 Lark")
-            
-        except Exception as e:
-            logger.error(f"Lark 推送失败: {e}")
     
     def __init__(self):
         self.binance: BinanceExchange = None
@@ -61,6 +36,9 @@ class ArbitrageBot:
         self.notion_client = Client(auth=os.getenv('NOTION_TOKEN'))
         self.tasks: List[asyncio.Task] = []
         self.running = False
+        
+        # 添加每日分析器
+        self.analyzer = DailyAnalyzer()  
         
         # 记录推送状态
         self.daily_records_sent: datetime = None  # 8点交易记录
@@ -184,22 +162,14 @@ class ArbitrageBot:
                         logger.info("📋 开始生成每日交易记录...")
                         await self._send_daily_records()
                 
-                # 9点的分析由 nanobot 定时任务独立完成（读取 Notion -> 分析 -> 推 Lark）
-                # 套利机器人不参与，避免耦合
-                # if now.hour == 9 and now.minute == 0:
-                #    if self.daily_analysis_sent != today:
-                #        self.daily_analysis_sent = today
-                #        logger.info("📊 开始生成每日分析总结...")
-                #        try:
-                #            yesterday = (datetime.now() - timedelta(days=1)).date()
-                #            yesterday_str = str(yesterday)
-                #            records = self._collect_trade_records(yesterday_str)
-                            # 关键修复：传入两个参数！
-                #            await self._send_daily_analysis(yesterday_str, records)
-                #        except Exception as e:
-                #            logger.error(f"生成每日分析失败: {e}", exc_info=True)
-                            # 出错后重置标记，下次还会尝试
-                #           self.daily_analysis_sent = None
+                # 早上 9:00 直接分析并推送到 Lark（不依赖外部 nanobot）
+                if now.hour == 9 and now.minute == 0:
+                    if self.daily_analysis_sent != today:
+                        self.daily_analysis_sent = today
+                        logger.info("📊 开始生成每日分析总结...")
+                        
+                        # 直接调用 analyzer，不走外部 HTTP
+                        await self.analyzer.run_daily_analysis()
                 
                 await asyncio.sleep(60)
                 
@@ -236,51 +206,6 @@ class ArbitrageBot:
         except Exception as e:
             logger.error(f"发送每日交易记录失败: {e}")
     
-    async def _send_daily_analysis(self, yesterday: str, records: list):
-        """生成每日分析总结，并推 Lark + 回写 Notion"""
-        # 需要先获取 yesterday 和 records 再传进去
-        yesterday = (datetime.now() - timedelta(days=1)).date()
-        records = self._collect_trade_records(str(yesterday))
-        await self._send_daily_analysis(str(yesterday), records)
-
-        # 安全地序列化 records，防止递归错误
-        try:
-            records_json = json.dumps(records, ensure_ascii=False, indent=2, default=str)
-        except Exception as e:
-            logger.error(f"序列化交易记录失败: {e}")
-            # 如果失败，简化数据
-            simple_records = {
-                'date': yesterday,
-                'total_trades': records.get('total_trades', 0),
-                'total_profit': records.get('total_profit', 0),
-                'trades_count': len(records.get('trades', []))
-            }
-            records_json = json.dumps(simple_records, ensure_ascii=False, indent=2)
-            
-        # 假设你已经有 records 汇总文本
-        summary_prompt = f"""
-        以下是昨日 ({yesterday}) 的交易记录汇总，请用中文生成一份简洁、专业、带标题和表情的每日总结报告：
-        {records_json}
-        总结内容包括：总交易笔数、总利润、主要币种表现、风险提示。
-        """
-
-        # 发送给 nanobot
-        nanobot_response = await self.notification_manager.send_to_nanobot(summary_prompt)
-        
-        if nanobot_response:
-            # 假设 nanobot 返回的是生成的总结文本（根据实际返回调整）
-            generated_summary = nanobot_response.get('result', str(nanobot_response))
-            
-            # 推送到 Lark（nanobot 已处理）
-            logger.info(f"Lark 总结已推送：{generated_summary[:100]}...")
-
-            # 回写到 Notion
-            await self.notification_manager.write_summary_to_notion(
-                generated_summary,
-                yesterday
-            )
-        else:
-            logger.warning("nanobot 未返回总结，无法回写 Notion")
     
     def _collect_trade_records(self, date_str: str) -> Dict:
         """收集指定日期的交易记录"""
