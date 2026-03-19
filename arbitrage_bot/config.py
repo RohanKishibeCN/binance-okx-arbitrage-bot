@@ -68,19 +68,58 @@ class Config:
         self.trading = TradingConfig()
         self.notification = NotificationConfig()
         
-        # 三角套利路径配置（简化版，只保留核心路径）
+        # 三角套利路径配置（保留但降低优先级，改为非主流币组合）
         self.triangular_paths = [
-            {'name': 'BTC-ETH-USDT', 'symbols': ['BTC/USDT', 'ETH/BTC', 'ETH/USDT']},
-            {'name': 'BTC-SOL-USDT', 'symbols': ['BTC/USDT', 'SOL/BTC', 'SOL/USDT']},
-            {'name': 'ETH-SOL-USDT', 'symbols': ['ETH/USDT', 'SOL/ETH', 'SOL/USDT']},
+            {'name': 'SOL-AVAX-USDT', 'symbols': ['SOL/USDT', 'AVAX/SOL', 'AVAX/USDT']},
+            {'name': 'MATIC-FET-USDT', 'symbols': ['MATIC/USDT', 'FET/MATIC', 'FET/USDT']},
+            {'name': 'LINK-UNI-USDT', 'symbols': ['LINK/USDT', 'UNI/LINK', 'UNI/USDT']},
+            {'name': 'DOT-ATOM-USDT', 'symbols': ['DOT/USDT', 'ATOM/DOT', 'ATOM/USDT']},
+            {'name': 'AVAX-FET-USDT', 'symbols': ['AVAX/USDT', 'FET/AVAX', 'FET/USDT']},
         ]
         
-        # 跨交易所套利币种（简化版，只保留核心币种）
+        # 跨交易所套利币种（扩展到中高市值非主流币，保持双边持仓）
         self.cross_exchange_symbols = [
+            # 原主流币（降低权重，保留作为基准）
             'BTC/USDT',
             'ETH/USDT',
-            'SOL/USDT',
+            
+            # 新增：中高市值币（波动大，价差机会多）
+            'SOL/USDT',      # Solana - 波动率高
+            'AVAX/USDT',     # Avalanche - 生态活跃
+            'MATIC/USDT',    # Polygon - 但注意已更名为POL
+            'FET/USDT',      # Fetch.ai - AI概念，波动极大
+            'LINK/USDT',     # Chainlink - 预言机龙头
+            'UNI/USDT',      # Uniswap - DeFi蓝筹
+            'DOT/USDT',      # Polkadot - 跨链概念
+            'ATOM/USDT',     # Cosmos - 生态币
+            'ARB/USDT',      # Arbitrum - L2概念
+            'OP/USDT',       # Optimism - L2概念
+            'NEAR/USDT',     # NEAR Protocol
+            'APT/USDT',      # Aptos - 新公链
+            'SUI/USDT',      # Sui - 新公链
+            'SEI/USDT',      # Sei - 高性能链
+            'PYTH/USDT',     # Pyth - 预言机新贵，波动大
+            'JTO/USDT',      # Jito - Solana生态，高波动
+            'WLD/USDT',      # Worldcoin - AI概念，波动极大
+            'ARKM/USDT',     # Arkham - 数据分析，新币波动大
+            'PEPE/USDT',     # Meme币 - 极高波动（小仓位）
+            'WIF/USDT',      # Meme币 - 极高波动（小仓位）
         ]
+
+        # 策略权重配置（新增）
+        self.strategy_weights = {
+            'cross_exchange': 0.7,    # 跨所套利权重 70%
+            'triangular': 0.3,         # 三角套利权重 30%
+        }
+
+        # 跨所套利特有配置
+        self.cross_exchange_config = {
+            'min_profit_threshold': 0.0015,  # 跨所门槛更低（0.15%），双边持仓无提币成本
+            'check_interval_fast': 0.2,      # 快速检查间隔（200ms）
+            'check_interval_slow': 1.0,      # 慢速检查间隔（用于低优先级币种）
+            'depth_validation': True,        # 启用深度验证
+            'max_spread_history': 100,       # 保存最近100个价差用于动态阈值
+        }
     
     def print_config(self):
         """打印配置信息（隐藏敏感信息）"""
