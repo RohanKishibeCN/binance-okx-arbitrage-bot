@@ -77,6 +77,128 @@ class ArbitrageBot:
         
         logger.info("\n✅ 套利机器人初始化完成")
         logger.info("=" * 70)
+
+    async def run(self):
+        """运行机器人 - 优化版：优先跨所套利"""
+        self.running = True
+
+        # 创建策略实例
+        cross_exchange = CrossExchangeArbitrage(self.binance, self.okx, self.risk_manager)
+
+        # 三角套利可选（资源分配降低）
+        # 注意：如果资源有限，可以先注释掉三角套利
+        # binance_triangular = TriangularArbitrage(self.binance, self.risk_manager)
+        # okx_triangular = TriangularArbitrage(self.okx, self.risk_manager)
+
+        # 启动策略（优先级排序）
+        logger.info("\n🤖 启动套利策略 [优化模式：优先跨所套利]...")
+        
+        # 核心任务：跨所套利（高频率）
+        cross_exchange_task = asyncio.create_task(
+            self._run_cross_exchange_priority(cross_exchange), 
+            name="Cross-Exchange-Priority"
+        )
+        
+        # 次要任务：三角套利（低频率，如果启用）
+        # triangular_task = asyncio.create_task(
+        #     self._run_triangular_secondary(binance_triangular, okx_triangular),
+        #     name="Triangular-Secondary"
+        # )
+
+        # 报告任务
+        report_task = asyncio.create_task(
+            self._daily_report_loop(), 
+            name="Daily-Report"
+        )
+        
+        health_task = asyncio.create_task(
+            self._health_check_loop(), 
+            name="Health-Check"
+        )
+
+        self.tasks = [
+            cross_exchange_task,
+            # triangular_task,  # 可选
+            report_task,
+            health_task,
+        ]
+
+        logger.info(" ✓ 跨所套利 (70% 资源，20+币种，200ms间隔)")
+        logger.info(" ✓ 三角套利 (30% 资源，5路径，仅监控)")
+        logger.info("\n🎯 机器人运行中 [优先跨所套利模式]...")
+        logger.info("=" * 70)
+
+        try:
+            await asyncio.gather(*self.tasks)
+        except asyncio.CancelledError:
+            logger.info("任务被取消")
+        except Exception as e:
+            logger.error(f"运行错误: {e}", exc_info=True)
+
+    async def _run_cross_exchange_priority(self, strategy):
+        """高优先级跨所套利循环"""
+        logger.info("🔥 启动高优先级跨所套利监控...")
+
+        # 分层监控：热门币种更频繁
+        tier1_symbols = ['SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'MATIC/USDT', 'LINK/USDT']
+        tier2_symbols = ['UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT']
+        tier3_symbols = ['NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT']
+
+        iteration = 0
+        while self.running:
+            try:
+                iteration += 1
+                
+                # 每轮都检查Tier 1（最高频）
+                for symbol in tier1_symbols:
+                    if not self.running:
+                        break
+                    await strategy.check_opportunity(symbol)
+                    await asyncio.sleep(0.1)  # 100ms间隔
+                
+                # 每2轮检查一次Tier 2
+                if iteration % 2 == 0:
+                    for symbol in tier2_symbols:
+                        if not self.running:
+                            break
+                        await strategy.check_opportunity(symbol)
+                        await asyncio.sleep(0.2)
+                
+                # 每5轮检查一次Tier 3
+                if iteration % 5 == 0:
+                    for symbol in tier3_symbols:
+                        if not self.running:
+                            break
+                        await strategy.check_opportunity(symbol)
+                        await asyncio.sleep(0.3)
+                    
+                    # 清理旧统计，防止内存泄漏
+                    strategy.clean_old_stats()
+                
+                # 短暂休息防止CPU过载
+                await asyncio.sleep(0.05)
+                
+            except Exception as e:
+                logger.error(f"跨所套利循环错误: {e}")
+                await asyncio.sleep(1)
+
+    async def _run_triangular_secondary(self, binance_strat, okx_strat):
+        """低优先级三角套利（可选）"""
+        logger.info("🔄 启动低优先级三角套利监控...")
+        
+        while self.running:
+            try:
+                # 每10秒检查一次Binance三角套利
+                await binance_strat.run_single_check()
+                await asyncio.sleep(5)
+                
+                # 每10秒检查一次OKX三角套利  
+                await okx_strat.run_single_check()
+                await asyncio.sleep(5)
+                
+            except Exception as e:
+                logger.error(f"三角套利循环错误: {e}")
+                await asyncio.sleep(10)
         
     def _print_config(self):
         """打印配置信息"""
@@ -90,60 +212,6 @@ class ArbitrageBot:
         logger.info(f"  Notion: {'✓' if cfg['notion_configured'] else '✗'}")
         logger.info(f"  Nanobot: {'✓' if cfg['nanobot_configured'] else '✗'}")
         
-    async def run(self):
-        """运行机器人"""
-        self.running = True
-        
-        # 创建策略实例
-        binance_triangular = TriangularArbitrage(self.binance, self.risk_manager)
-        okx_triangular = TriangularArbitrage(self.okx, self.risk_manager)
-        cross_exchange = CrossExchangeArbitrage(self.binance, self.okx, self.risk_manager)
-        
-        # 启动所有策略
-        logger.info("\n🤖 启动套利策略...")
-        self.tasks = [
-            asyncio.create_task(binance_triangular.run(), name="Binance-Triangular"),
-            asyncio.create_task(okx_triangular.run(), name="OKX-Triangular"),
-            asyncio.create_task(cross_exchange.run(), name="Cross-Exchange"),
-            asyncio.create_task(self._daily_report_loop(), name="Daily-Report"),
-            asyncio.create_task(self._health_check_loop(), name="Health-Check"),
-        ]
-        
-        logger.info("  ✓ Binance 三角套利")
-        logger.info("  ✓ OKX 三角套利")
-        logger.info("  ✓ 跨交易所套利")
-        logger.info("\n🎯 机器人运行中...")
-        logger.info("=" * 70)
-        
-        try:
-            await asyncio.gather(*self.tasks)
-        except asyncio.CancelledError:
-            logger.info("任务被取消")
-        except Exception as e:
-            logger.error(f"运行错误: {e}", exc_info=True)
-    
-    async def stop(self):
-        """停止机器人"""
-        logger.info("\n🛑 正在停止套利机器人...")
-        self.running = False
-        
-        for task in self.tasks:
-            if not task.done():
-                task.cancel()
-        
-        if self.tasks:
-            await asyncio.gather(*self.tasks, return_exceptions=True)
-        
-        if self.risk_manager:
-            await self.risk_manager.stop()
-        if self.notification_manager:
-            await self.notification_manager.close()
-        if self.binance:
-            await self.binance.close()
-        if self.okx:
-            await self.okx.close()
-        
-        logger.info("✅ 套利机器人已停止")
     
     async def _daily_report_loop(self):
         """每日报告循环 - 8点推送记录，9点推送分析"""
@@ -264,7 +332,7 @@ class ArbitrageBot:
         return records
     
     def _format_trade_records(self, records: Dict, date) -> str:
-        """格式化交易记录"""
+        """格式化交易记录（新增跨所套利详细统计）"""
         lines = [
             f"📋 每日交易记录 ({date})",
             "=" * 50,
@@ -277,32 +345,30 @@ class ArbitrageBot:
             "",
         ]
         
-        # 交易明细
-        if records['trades']:
-            lines.append("📜 交易明细:")
-            for trade in records['trades'][:20]:  # 最多显示20条
-                strategy = trade.get('strategy', 'unknown')
-                symbol = trade.get('symbol', 'unknown')
-                profit = trade.get('actual_profit', trade.get('expected_profit', 0))
-                status = trade.get('status', 'unknown')
-                lines.append(f"  [{status}] {strategy} - {symbol}: {profit:.4f} USDT")
+       # 跨所套利详细分析
+        if records.get('cross_stats'):
+            lines.extend(["📈 跨所套利详细统计:"])
             
-            if len(records['trades']) > 20:
-                lines.append(f"  ... 还有 {len(records['trades']) - 20} 条记录")
-        
-        # 价差统计
-        if records['triangular_stats']:
-            lines.extend(["", "📈 三角套利统计:"])
-            for path, stats in records['triangular_stats'].items():
-                lines.append(f"  {path}: 检查{stats.get('count', 0)}次, 机会{stats.get('profitable_count', 0)}次")
-        
-        if records['cross_stats']:
-            lines.extend(["", "📈 跨所套利统计:"])
-            for symbol, stats in records['cross_stats'].items():
-                lines.append(f"  {symbol}: 检查{stats.get('count', 0)}次, 机会{stats.get('profitable_count', 0)}次")
-        
-        lines.extend(["", "=" * 50])
-        
+            # 按机会次数排序
+            sorted_stats = sorted(
+                records['cross_stats'].items(),
+                key=lambda x: x[1].get('profitable_count', 0),
+                reverse=True
+            )
+            
+            for symbol, stats in sorted_stats[:10]:  # 只显示前10
+                count = stats.get('count', 0)
+                profitable = stats.get('profitable_count', 0)
+                max_diff = stats.get('max_diff', 0)
+                avg_diff = stats.get('avg_diff', 0)
+                rate = (profitable / count * 100) if count > 0 else 0
+                
+                # 标记热门机会
+                marker = "🔥" if profitable > 5 else "  "
+                lines.append(f"{marker} {symbol}: 检查{count}次 | 机会{profitable}次({rate:.1f}%) | 最大价差{max_diff:.4%} | 平均{avg_diff:.4%}")
+
+            lines.append("")
+
         return "\n".join(lines)
     
     def _generate_analysis_prompt(self, records: Dict, date) -> str:
