@@ -11,6 +11,7 @@ from notion_client import Client
 from datetime import datetime, timedelta
 from typing import List, Dict
 
+from .analyzer import DailyAnalyzer
 from .config import config
 from .exchanges import BinanceExchange, OKXExchange
 from .strategies import TriangularArbitrage, CrossExchangeArbitrage
