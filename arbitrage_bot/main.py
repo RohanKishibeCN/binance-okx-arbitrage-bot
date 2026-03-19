@@ -206,7 +206,7 @@ class ArbitrageBot:
                 await asyncio.sleep(60)
     
     async def _send_daily_records(self):
-        """发送每日交易记录（8点）"""
+        """发送每日交易记录（8点）- 只写入 Notion，不推 Lark"""
         try:
             yesterday = (datetime.now() - timedelta(days=1)).date()
             date_str = str(yesterday)
