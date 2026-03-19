@@ -13,7 +13,7 @@ from typing import List, Dict
 
 from .config import config
 from .exchanges import BinanceExchange, OKXExchange
-from .strategies import TriangularArbitrage, CrossExchangeArbitrage
+from .strategies import CrossExchangeArbitrage  # 三角套利可选导入
 from .risk import RiskManager
 from .notifications import NotificationManager
 from .utils.logger import setup_logger, get_logger
@@ -82,6 +82,9 @@ class ArbitrageBot:
         """运行机器人 - 优化版：优先跨所套利"""
         self.running = True
 
+        # 关键修复：确保 config 已导入
+        from .config import config  # 局部导入保险
+
         # 创建策略实例
         cross_exchange = CrossExchangeArbitrage(self.binance, self.okx, self.risk_manager)
 
@@ -135,7 +138,34 @@ class ArbitrageBot:
         except Exception as e:
             logger.error(f"运行错误: {e}", exc_info=True)
 
+    # 关键修复：stop 方法必须是类方法（注意缩进在 class 内部）
+    async def stop(self):
+        """停止机器人"""
+        logger.info("\n🛑 正在停止套利机器人...")
+        self.running = False
+
+        for task in self.tasks:
+            if not task.done():
+                task.cancel()
+
+        if self.tasks:
+            await asyncio.gather(*self.tasks, return_exceptions=True)
+
+        if self.risk_manager:
+            await self.risk_manager.stop()
+        if self.notification_manager:
+            await self.notification_manager.close()
+        if self.binance:
+            await self.binance.close()
+        if self.okx:
+            await self.okx.close()
+
+        logger.info("✅ 套利机器人已停止")
+
     async def _run_cross_exchange_priority(self, strategy):
+        # 关键修复：局部导入避免循环依赖
+        from .config import config
+        
         """高优先级跨所套利循环"""
         logger.info("🔥 启动高优先级跨所套利监控...")
 
@@ -299,21 +329,15 @@ class ArbitrageBot:
                         'status': trade.status.value,
                         'time': trade.created_at.isoformat()
                     })
+        # 读取跨所套利统计
+        stats_file = 'data/cross_exchange_stats.json'
+        if os.path.exists(stats_file):
+            try:
+                with open(stats_file, 'r') as f:
+                    records['cross_stats'] = json.load(f)
+            except Exception as e:
+                logger.error(f"读取统计失败: {e}")
         
-        # 读取模拟交易记录
-        for filename in ['simulated_trades_binance.json', 'simulated_trades_okx.json', 'simulated_trades_cross.json']:
-            filepath = f"data/{filename}"
-            if os.path.exists(filepath):
-                try:
-                    with open(filepath, 'r') as f:
-                        trades = json.load(f)
-                        for trade in trades:
-                            if trade['timestamp'].startswith(date_str):
-                                records['trades'].append(trade)
-                                if 'expected_profit' in trade:
-                                    records['total_profit'] += trade['expected_profit']
-                except Exception as e:
-                    logger.error(f"读取模拟交易记录失败: {e}")
         
         # 读取价差统计
         for stats_file in ['triangular_stats_binance.json', 'triangular_stats_okx.json', 'cross_exchange_stats.json']:
