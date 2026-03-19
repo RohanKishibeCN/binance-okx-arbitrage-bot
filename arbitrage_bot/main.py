@@ -183,21 +183,22 @@ class ArbitrageBot:
                         logger.info("📋 开始生成每日交易记录...")
                         await self._send_daily_records()
                 
-                # 早上 9:00 推送分析总结（由 nanobot 生成）
-                if now.hour == 9 and now.minute == 0:
-                    if self.daily_analysis_sent != today:
-                        self.daily_analysis_sent = today
-                        logger.info("📊 开始生成每日分析总结...")
-                        try:
-                            yesterday = (datetime.now() - timedelta(days=1)).date()
-                            yesterday_str = str(yesterday)
-                            records = self._collect_trade_records(yesterday_str)
+                # 9点的分析由 nanobot 定时任务独立完成（读取 Notion -> 分析 -> 推 Lark）
+                # 套利机器人不参与，避免耦合
+                # if now.hour == 9 and now.minute == 0:
+                #    if self.daily_analysis_sent != today:
+                #        self.daily_analysis_sent = today
+                #        logger.info("📊 开始生成每日分析总结...")
+                #        try:
+                #            yesterday = (datetime.now() - timedelta(days=1)).date()
+                #            yesterday_str = str(yesterday)
+                #            records = self._collect_trade_records(yesterday_str)
                             # 关键修复：传入两个参数！
-                            await self._send_daily_analysis(yesterday_str, records)
-                        except Exception as e:
-                            logger.error(f"生成每日分析失败: {e}", exc_info=True)
+                #            await self._send_daily_analysis(yesterday_str, records)
+                #        except Exception as e:
+                #            logger.error(f"生成每日分析失败: {e}", exc_info=True)
                             # 出错后重置标记，下次还会尝试
-                            self.daily_analysis_sent = None
+                #           self.daily_analysis_sent = None
                 
                 await asyncio.sleep(60)
                 
@@ -216,21 +217,20 @@ class ArbitrageBot:
             
             # 生成记录内容
             content = self._format_trade_records(records, yesterday)
-            
-            # 发送到 Notion（修复：write_trade 方法不存在，改用 send_to_nanobot 或直接跳过）
-            await self.notification_manager.write_trade(
+
+            # 只写入 Notion（8点任务完成）
+            success = await self.notification_manager.write_trade(
                 trade_type="每日交易记录",
                 content=content,
                 profit=records['total_profit'],
                 exchange="Summary",
-                extra_data={'date': date_str}
+                extra_data={'date': date_str, 'trades_count': records['total_trades']}
             )
-            logger.info(f"每日交易记录已准备: {date_str}, 利润: {records['total_profit']}")
 
-            # 推送到 Lark
-            await self._trigger_lark(f"每日交易记录 ({yesterday})\n已推送到 Lark")
-            
-            logger.info(f"✅ 每日交易记录已发送 ({yesterday})")
+            if success:
+                logger.info(f"✅ 每日交易记录已写入 Notion ({yesterday})")
+            else:
+                logger.error(f"❌ 写入 Notion 失败 ({yesterday})")
             
         except Exception as e:
             logger.error(f"发送每日交易记录失败: {e}")
