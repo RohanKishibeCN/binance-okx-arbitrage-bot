@@ -51,6 +51,8 @@ class Config:
             'trade_amount': self.trading.trade_amount_usdt,
             'binance_api_configured': bool(self.binance.api_key),
             'okx_api_configured': bool(self.okx.api_key),
+            'notion_configured': bool(self.notification.notion_token),  # 添加这行
+            'nanobot_configured': bool(self.notification.nanobot_url),  # 添加这行
         }
 
 # 全局实例
