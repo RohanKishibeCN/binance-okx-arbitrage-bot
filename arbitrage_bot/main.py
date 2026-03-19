@@ -162,14 +162,6 @@ class ArbitrageBot:
                         logger.info("📋 开始生成每日交易记录...")
                         await self._send_daily_records()
                 
-                # 早上 9:00 直接分析并推送到 Lark（不依赖外部 nanobot）
-                if now.hour == 9 and now.minute == 0:
-                    if self.daily_analysis_sent != today:
-                        self.daily_analysis_sent = today
-                        logger.info("📊 开始生成每日分析总结...")
-                        
-                        # 直接调用 analyzer，不走外部 HTTP
-                        await self.analyzer.run_daily_analysis()
                 
                 await asyncio.sleep(60)
                 
