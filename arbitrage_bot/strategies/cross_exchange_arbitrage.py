@@ -34,7 +34,7 @@ class CrossExchangeArbitrage:
         logger.info("🔥 跨所套利策略启动...")
         
         # 分层币种列表
-        tier1_symbols = ['SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'MATIC/USDT', 'LINK/USDT']
+        tier1_symbols = ['SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'POL/USDT', 'LINK/USDT']
         tier2_symbols = ['UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT']
         tier3_symbols = ['NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT']
         
