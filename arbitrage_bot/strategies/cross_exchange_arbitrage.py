@@ -67,20 +67,20 @@ class CrossExchangeArbitrage:
                 await asyncio.sleep(1)  # 每轮间隔1秒
                 
                 # Tier 2: 中频检查（每2轮）
-                if iteration % 2 == 0:
-                    for symbol in tier2_symbols:
-                        if not self.running:
-                            break
-                        await self.check_opportunity(symbol)
-                        await asyncio.sleep(0.15)
+          #      if iteration % 2 == 0:
+          #          for symbol in tier2_symbols:
+          #              if not self.running:
+          #                  break
+          #              await self.check_opportunity(symbol)
+          #              await asyncio.sleep(0.15)
                 
                 # Tier 3: 低频检查（每5轮）
-                if iteration % 5 == 0:
-                    for symbol in tier3_symbols:
-                        if not self.running:
-                            break
-                        await self.check_opportunity(symbol)
-                        await asyncio.sleep(0.2)
+          #      if iteration % 5 == 0:
+          #          for symbol in tier3_symbols:
+          #              if not self.running:
+          #                  break
+          #              await self.check_opportunity(symbol)
+          #              await asyncio.sleep(0.2)
                     
                     # 清理旧统计
                     self._clean_old_stats()
@@ -146,15 +146,28 @@ class CrossExchangeArbitrage:
             logger.debug(f"检查机会失败 {symbol}: {e}")
 
     async def _get_exchange_data(self, exchange, symbol: str):
-        """获取交易所订单簿数据"""
+        """获取交易所数据 - 修复 OrderBook 对象处理"""
         try:
             orderbook = await exchange.fetch_order_book(symbol, limit=20)
-            return {
-                'bids': orderbook['bids'],  # [price, amount]
-                'asks': orderbook['asks'],
-                'timestamp': orderbook['timestamp']
-            }
+            
+            # 处理 OrderBook 对象（可能是对象或字典）
+            if hasattr(orderbook, 'bids') and hasattr(orderbook, 'asks'):
+                # 是对象，使用属性访问
+                return {
+                    'bids': orderbook.bids,
+                    'asks': orderbook.asks,
+                    'timestamp': getattr(orderbook, 'timestamp', None)
+                }
+            else:
+                # 是字典，直接使用
+                return {
+                    'bids': orderbook['bids'],
+                    'asks': orderbook['asks'],
+                    'timestamp': orderbook.get('timestamp')
+                }
+                
         except Exception as e:
+            logger.error(f"获取 {symbol} 订单簿失败: {e}")
             raise e
 
     def _calculate_real_price(self, data: Dict, side: str) -> Optional[float]:
