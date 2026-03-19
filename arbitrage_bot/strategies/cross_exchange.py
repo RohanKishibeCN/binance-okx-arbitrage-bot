@@ -1,39 +1,86 @@
 # arbitrage_bot/strategies/cross_exchange_arbitrage.py
 
 import asyncio
-import time
 import json
 import os
 from typing import Dict, Optional
 from datetime import datetime
-from ..utils.logger import get_logger
-
-# 关键修复：导入 config
 from ..config import config
+from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class CrossExchangeArbitrage:
+    """跨交易所套利策略（双边持仓模式）"""
+    
     def __init__(self, binance, okx, risk_manager):
         self.binance = binance
         self.okx = okx
         self.risk_manager = risk_manager
-
-        # 关键修复：正确访问配置
         self.config = config.trading
         self.ce_config = getattr(config, 'cross_exchange_config', {
             'min_profit_threshold': 0.0015,
             'max_spread_history': 100
         })
         
-        # 统计信息
         self.stats = {}
-        self.spread_history = {}  # 保存价差历史用于动态阈值
+        self.spread_history = {}
+        self.running = False
+
+    async def run(self):
+        """主运行循环 - 分层监控所有币种"""
+        self.running = True
+        logger.info("🔥 跨所套利策略启动...")
         
+        # 分层币种列表
+        tier1_symbols = ['SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'MATIC/USDT', 'LINK/USDT']
+        tier2_symbols = ['UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT']
+        tier3_symbols = ['NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT', 'JTO/USDT', 'WLD/USDT']
+        
+        iteration = 0
+        
+        while self.running:
+            try:
+                iteration += 1
+                
+                # Tier 1: 高频检查（每轮都查）
+                for symbol in tier1_symbols:
+                    if not self.running:
+                        break
+                    await self.check_opportunity(symbol)
+                    await asyncio.sleep(0.1)
+                
+                # Tier 2: 中频检查（每2轮）
+                if iteration % 2 == 0:
+                    for symbol in tier2_symbols:
+                        if not self.running:
+                            break
+                        await self.check_opportunity(symbol)
+                        await asyncio.sleep(0.15)
+                
+                # Tier 3: 低频检查（每5轮）
+                if iteration % 5 == 0:
+                    for symbol in tier3_symbols:
+                        if not self.running:
+                            break
+                        await self.check_opportunity(symbol)
+                        await asyncio.sleep(0.2)
+                    
+                    # 清理旧统计
+                    self._clean_old_stats()
+                
+                # 防止CPU过载
+                await asyncio.sleep(0.05)
+                
+            except Exception as e:
+                logger.error(f"跨所套利循环错误: {e}")
+                await asyncio.sleep(1)
+
     async def check_opportunity(self, symbol: str):
-        """检查跨所套利机会（优化版）"""
+        """检查特定币种的套利机会"""
         try:
-            # 并行获取两个交易所的数据（加快速度）
+            # 并行获取两个交易所数据
             binance_data, okx_data = await asyncio.gather(
                 self._get_exchange_data(self.binance, symbol),
                 self._get_exchange_data(self.okx, symbol),
@@ -43,41 +90,43 @@ class CrossExchangeArbitrage:
             if isinstance(binance_data, Exception) or isinstance(okx_data, Exception):
                 return
             
-            # 计算价差（考虑深度的真实价格）
-            binance_price = self._calculate_real_price(binance_data, 'buy')
-            okx_price = self._calculate_real_price(okx_data, 'sell')
+            # 计算真实价格（考虑深度）
+            binance_buy = self._calculate_real_price(binance_data, 'buy')
+            okx_sell = self._calculate_real_price(okx_data, 'sell')
+            binance_sell = self._calculate_real_price(binance_data, 'sell')
+            okx_buy = self._calculate_real_price(okx_data, 'buy')
             
-            if not binance_price or not okx_price:
+            if not all([binance_buy, okx_sell, binance_sell, okx_buy]):
                 return
             
-            # 计算价差方向
-            spread_b2o = (okx_price - binance_price) / binance_price  # Binance买, OKX卖
-            spread_o2b = (binance_price - okx_price) / okx_price      # OKX买, Binance卖
+            # 计算两个方向的价差
+            # 方向1: Binance买 -> OKX卖
+            spread_b2o = (okx_sell - binance_buy) / binance_buy
+            
+            # 方向2: OKX买 -> Binance卖  
+            spread_o2b = (binance_sell - okx_buy) / okx_buy
             
             # 更新统计
+            max_spread = max(spread_b2o, spread_o2b)
             await self._update_stats(symbol, spread_b2o, spread_o2b)
             
             # 动态阈值判断
             min_profit = self._get_dynamic_threshold(symbol)
             
-            # 检查机会
+            # 执行套利
             if spread_b2o > min_profit:
                 await self._execute_arbitrage(symbol, 'binance_buy_okx_sell', spread_b2o)
             elif spread_o2b > min_profit:
                 await self._execute_arbitrage(symbol, 'okx_buy_binance_sell', spread_o2b)
                 
         except Exception as e:
-            logger.error(f"检查跨所套利失败 {symbol}: {e}")
+            logger.debug(f"检查机会失败 {symbol}: {e}")
 
     async def _get_exchange_data(self, exchange, symbol: str):
         """获取交易所订单簿数据"""
         try:
-            # 使用最佳实践：先检查ticker快速筛选，再获取深度
-            ticker = await exchange.fetch_ticker(symbol)
             orderbook = await exchange.fetch_order_book(symbol, limit=20)
-            
             return {
-                'ticker': ticker,
                 'bids': orderbook['bids'],  # [price, amount]
                 'asks': orderbook['asks'],
                 'timestamp': orderbook['timestamp']
@@ -86,12 +135,12 @@ class CrossExchangeArbitrage:
             raise e
 
     def _calculate_real_price(self, data: Dict, side: str) -> Optional[float]:
-        """计算考虑深度的真实成交价格（防止滑点）"""
+        """计算考虑深度的真实成交价格"""
         try:
             amount_usdt = self.config.trade_amount_usdt
             
             if side == 'buy':
-                # 计算实际买入成本（从asks累积）
+                # 从asks累积计算买入成本
                 asks = data['asks']
                 total_cost = 0
                 total_qty = 0
@@ -109,19 +158,20 @@ class CrossExchangeArbitrage:
                 return amount_usdt / total_qty if total_qty > 0 else None
                 
             else:  # sell
-                # 计算实际卖出可得（从bids累积）
+                # 从bids累积计算卖出所得
                 bids = data['bids']
                 total_received = 0
-                remaining_qty = amount_usdt / bids[0][0] if bids else 0  # 估算需要的币量
+                target_qty = amount_usdt / bids[0][0] if bids else 0
                 
                 for price, qty in bids:
-                    if remaining_qty <= 0:
+                    if target_qty <= 0:
                         break
-                    qty_to_sell = min(qty, remaining_qty)
+                    qty_to_sell = min(qty, target_qty)
                     total_received += qty_to_sell * price
-                    remaining_qty -= qty_to_sell
+                    target_qty -= qty_to_sell
                 
-                return total_received / (amount_usdt / bids[0][0]) if total_received > 0 else None
+                original_qty = amount_usdt / bids[0][0] if bids else 1
+                return total_received / original_qty if total_received > 0 else None
                 
         except Exception:
             return None
@@ -129,15 +179,13 @@ class CrossExchangeArbitrage:
     def _get_dynamic_threshold(self, symbol: str) -> float:
         """获取动态利润阈值"""
         base = self.ce_config.get('min_profit_threshold', 0.0015)
-        
-        # 根据历史价差调整
         history = self.spread_history.get(symbol, [])
         
         if len(history) >= 10:
             avg = sum(history) / len(history)
-            if avg < 0.0005:
+            if avg < 0.0005:  # 平均价差太小，提高门槛
                 return base * 1.5
-            elif max(history) > 0.01:
+            elif max(history) > 0.01:  # 波动大，降低门槛
                 return base * 0.8
         
         return base
@@ -145,28 +193,54 @@ class CrossExchangeArbitrage:
     async def _execute_arbitrage(self, symbol: str, direction: str, spread: float):
         """执行套利"""
         try:
+            # 风控检查
             if not await self.risk_manager.can_trade():
                 return
             
             amount = self.config.trade_amount_usdt
             
             if self.config.dry_run:
-                profit = amount * spread - (amount * 0.001 * 2)
-                logger.info(f"[DRY_RUN] 跨所套利 {symbol}: {direction}, 价差{spread:.4%}, 预估利润{profit:.2f}USDT")
-                self._record_trade(symbol, direction, spread, profit, "simulated")
+                # 模拟模式：扣除双边手续费
+                profit = amount * spread - (amount * self.config.fee_rate * 2)
+                if profit > 0:
+                    logger.info(f"[DRY_RUN] 跨所套利 {symbol}: {direction}, 价差{spread:.4%}, 预估利润{profit:.2f}USDT")
+                    self._record_trade(symbol, direction, spread, profit, "simulated")
             else:
-                logger.info(f"[LIVE] 执行套利 {symbol}: {direction}")
-                # 实际执行逻辑...
+                # 实盘模式（待实现）
+                logger.info(f"[LIVE] 执行套利 {symbol}: {direction}, 价差{spread:.4%}")
                 
         except Exception as e:
             logger.error(f"执行套利失败 {symbol}: {e}")
+
+    def _record_trade(self, symbol, direction, spread, profit, status):
+        """记录交易"""
+        trade = {
+            'symbol': symbol,
+            'direction': direction,
+            'spread': spread,
+            'profit': profit,
+            'status': status,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # 追加写入文件
+        filepath = 'data/cross_exchange_trades.json'
+        trades = []
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                trades = json.load(f)
+        trades.append(trade)
+        with open(filepath, 'w') as f:
+            json.dump(trades, f)
 
     async def _update_stats(self, symbol: str, spread_b2o: float, spread_o2b: float):
         """更新统计"""
         if symbol not in self.stats:
             self.stats[symbol] = {
-                'count': 0, 'profitable_count': 0, 
-                'max_diff': 0, 'total_spread': 0
+                'count': 0,
+                'profitable_count': 0,
+                'max_diff': 0,
+                'total_spread': 0
             }
         
         stats = self.stats[symbol]
@@ -196,7 +270,7 @@ class CrossExchangeArbitrage:
         with open('data/cross_exchange_stats.json', 'w') as f:
             json.dump(self.stats, f)
 
-    def clean_old_stats(self):
+    def _clean_old_stats(self):
         """清理旧统计"""
         current = set(config.cross_exchange_symbols)
         for k in list(self.stats.keys()):
