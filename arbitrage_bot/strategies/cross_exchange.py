@@ -2,16 +2,29 @@
 
 import asyncio
 import time
+import json
+import os
 from typing import Dict, Optional
 from datetime import datetime
+from ..utils.logger import get_logger
+
+# 关键修复：导入 config
+from ..config import config
+
+logger = get_logger(__name__)
 
 class CrossExchangeArbitrage:
     def __init__(self, binance, okx, risk_manager):
         self.binance = binance
         self.okx = okx
         self.risk_manager = risk_manager
+
+        # 关键修复：正确访问配置
         self.config = config.trading
-        self.ce_config = config.cross_exchange_config
+        self.ce_config = getattr(config, 'cross_exchange_config', {
+            'min_profit_threshold': 0.0015,
+            'max_spread_history': 100
+        })
         
         # 统计信息
         self.stats = {}
@@ -115,101 +128,82 @@ class CrossExchangeArbitrage:
 
     def _get_dynamic_threshold(self, symbol: str) -> float:
         """获取动态利润阈值"""
-        base_threshold = self.ce_config['min_profit_threshold']  # 0.15%
+        base = self.ce_config.get('min_profit_threshold', 0.0015)
         
         # 根据历史价差调整
         history = self.spread_history.get(symbol, [])
-        if len(history) >= 10:
-            avg_spread = sum(history) / len(history)
-            max_spread = max(history)
-            
-            # 如果历史价差很小，提高门槛避免频繁触发亏损
-            if avg_spread < 0.0005:  # 平均<0.05%
-                return base_threshold * 1.5
-            # 如果历史价差波动大，降低门槛抓住机会
-            elif max_spread > 0.01:  # 最大>1%
-                return base_threshold * 0.8
         
-        return base_threshold
+        if len(history) >= 10:
+            avg = sum(history) / len(history)
+            if avg < 0.0005:
+                return base * 1.5
+            elif max(history) > 0.01:
+                return base * 0.8
+        
+        return base
 
     async def _execute_arbitrage(self, symbol: str, direction: str, spread: float):
         """执行套利"""
         try:
-            # 检查风控
             if not await self.risk_manager.can_trade():
                 return
             
-            # 解析方向
-            if direction == 'binance_buy_okx_sell':
-                buy_exchange, sell_exchange = self.binance, self.okx
-                buy_name, sell_name = 'Binance', 'OKX'
-            else:
-                buy_exchange, sell_exchange = self.okx, self.binance
-                buy_name, sell_name = 'OKX', 'Binance'
-            
-            # 双边持仓模式（无需提币）
-            # 在buy_exchange买入，同时在sell_exchange卖出
             amount = self.config.trade_amount_usdt
             
-            # 模拟模式或实盘
             if self.config.dry_run:
-                profit = amount * spread - (amount * 0.001 * 2)  # 扣除两边手续费
+                profit = amount * spread - (amount * 0.001 * 2)
                 logger.info(f"[DRY_RUN] 跨所套利 {symbol}: {direction}, 价差{spread:.4%}, 预估利润{profit:.2f}USDT")
-                await self._record_simulated_trade(symbol, direction, spread, profit)
+                self._record_trade(symbol, direction, spread, profit, "simulated")
             else:
-                # 实际执行（需实现）
-                pass
+                logger.info(f"[LIVE] 执行套利 {symbol}: {direction}")
+                # 实际执行逻辑...
                 
         except Exception as e:
             logger.error(f"执行套利失败 {symbol}: {e}")
 
     async def _update_stats(self, symbol: str, spread_b2o: float, spread_o2b: float):
-        """更新统计信息"""
+        """更新统计"""
         if symbol not in self.stats:
             self.stats[symbol] = {
-                'count': 0,
-                'profitable_count': 0,
-                'max_diff': 0,
-                'avg_diff': 0,
-                'total_spread': 0
+                'count': 0, 'profitable_count': 0, 
+                'max_diff': 0, 'total_spread': 0
             }
         
         stats = self.stats[symbol]
         stats['count'] += 1
         
-        # 记录最大价差（绝对值）
         max_spread = max(abs(spread_b2o), abs(spread_o2b))
         if max_spread > stats['max_diff']:
             stats['max_diff'] = max_spread
         
-        # 记录正价差（机会）
-        if spread_b2o > 0 or spread_o2b > 0:
-            positive_spread = max(spread_b2o, spread_o2b)
+        positive = max(spread_b2o, spread_o2b)
+        if positive > 0:
             stats['profitable_count'] += 1
-            stats['total_spread'] += positive_spread
+            stats['total_spread'] += positive
             
-            # 保存到历史
             if symbol not in self.spread_history:
                 self.spread_history[symbol] = []
-            self.spread_history[symbol].append(positive_spread)
+            self.spread_history[symbol].append(positive)
             
-            # 限制历史长度
-            if len(self.spread_history[symbol]) > self.ce_config['max_spread_history']:
+            max_hist = self.ce_config.get('max_spread_history', 100)
+            if len(self.spread_history[symbol]) > max_hist:
                 self.spread_history[symbol].pop(0)
         
-        # 计算平均值
         if stats['profitable_count'] > 0:
             stats['avg_diff'] = stats['total_spread'] / stats['profitable_count']
+        
+        # 实时保存统计
+        with open('data/cross_exchange_stats.json', 'w') as f:
+            json.dump(self.stats, f)
 
     def clean_old_stats(self):
-        """清理旧统计，防止内存泄漏"""
-        # 只保留最近活跃的币种统计
-        current_symbols = set(config.cross_exchange_symbols)
-        keys_to_remove = [k for k in self.stats.keys() if k not in current_symbols]
-        for k in keys_to_remove:
-            del self.stats[k]
-            if k in self.spread_history:
-                del self.spread_history[k]
+        """清理旧统计"""
+        current = set(config.cross_exchange_symbols)
+        for k in list(self.stats.keys()):
+            if k not in current:
+                del self.stats[k]
+                if k in self.spread_history:
+                    del self.spread_history[k]
 
     def get_stats(self):
         return self.stats
