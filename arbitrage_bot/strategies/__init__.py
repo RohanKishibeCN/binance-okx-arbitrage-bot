@@ -1,6 +1,6 @@
-"""策略模块"""
+# arbitrage_bot/strategies/__init__.py
 
-from .triangular import TriangularArbitrage
-from .cross_exchange import CrossExchangeArbitrage
+from .cross_exchange_arbitrage import CrossExchangeArbitrage
+from .triangular_arbitrage import TriangularArbitrage
 
-__all__ = ['TriangularArbitrage', 'CrossExchangeArbitrage']
+__all__ = ['CrossExchangeArbitrage', 'TriangularArbitrage']
