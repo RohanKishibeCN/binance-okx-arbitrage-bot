@@ -69,7 +69,7 @@ class ArbitrageBot:
         logger.info(f" Notion: {'✓' if cfg['notion_configured'] else '✗'}")
 
     async def run(self):
-        """运行"""
+        """运行机器人 - 只保留跨所套利"""
         self.running = True
         cross_exchange = CrossExchangeArbitrage(self.binance, self.okx, self.risk_manager)
 
@@ -80,9 +80,9 @@ class ArbitrageBot:
             asyncio.create_task(self._health_check_loop(), name="Health-Check"),
         ]
 
-        logger.info(" ✓ 跨所套利 (20+币种)")
-        logger.info("\n🎯 运行中...")
-        logger.info("=" * 70)
+        logger.info(" ✓ 跨所套利 (20+币种，分层监控)")
+        logger.info(" ✗ 三角套利 (已禁用，资源占用高且机会少)")
+        logger.info("\n🎯 机器人运行中...")
 
         try:
             await asyncio.gather(*self.tasks)
