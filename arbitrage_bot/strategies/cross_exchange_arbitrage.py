@@ -29,14 +29,15 @@ class CrossExchangeArbitrage:
         self.running = False
 
     async def run(self):
-        """主运行循环 - 分层监控所有币种"""
+        """分层监控：热门币种更高频"""
         self.running = True
         logger.info("🔥 跨所套利策略启动...")
         
-        # 分层币种列表
-        tier1_symbols = ['SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'POL/USDT', 'LINK/USDT']
-        tier2_symbols = ['UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT']
-        tier3_symbols = ['NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT']
+        # 分层定义（根据波动性和机会率）
+        tier1 = ['SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'LINK/USDT', 'DOT/USDT']
+        tier2 = ['UNI/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT', 'NEAR/USDT']
+        tier3 = ['APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT', 'JTO/USDT']
+        tier4 = ['WLD/USDT', 'ARKM/USDT', 'PEPE/USDT', 'WIF/USDT', 'BTC/USDT', 'ETH/USDT']
         
         iteration = 0
         
@@ -45,8 +46,8 @@ class CrossExchangeArbitrage:
                 iteration += 1
                 logger.info(f"🔄 第 {iteration} 轮检查开始...")
                 
-                # Tier 1: 高频检查（每轮都查）
-                for symbol in tier1_symbols:
+                # Tier 1: 每轮都查（最高频，200ms间隔）
+                for symbol in tier1:
                     if not self.running:
                         break
                     logger.info(f"  检查 {symbol}...")
@@ -58,11 +59,11 @@ class CrossExchangeArbitrage:
                     except asyncio.TimeoutError:
                         logger.warning(f"  {symbol} 检查超时，跳过")
                         continue
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.2)
                 
-                # Tier 2: 中频检查（每2轮）
+                # Tier 2: 每2轮查一次（400ms间隔）
                 if iteration % 2 == 0:
-                    for symbol in tier2_symbols:
+                    for symbol in tier2:
                         if not self.running:
                             break
                         try:
@@ -72,11 +73,11 @@ class CrossExchangeArbitrage:
                             )
                         except asyncio.TimeoutError:
                             continue
-                        await asyncio.sleep(0.15)
+                        await asyncio.sleep(0.5)
                 
-                # Tier 3: 低频检查（每5轮）
+                # Tier 3: 每5轮查一次（1s间隔）
                 if iteration % 5 == 0:
-                    for symbol in tier3_symbols:
+                    for symbol in tier3:
                         if not self.running:
                             break
                         try:
@@ -86,7 +87,21 @@ class CrossExchangeArbitrage:
                             )
                         except asyncio.TimeoutError:
                             continue
-                        await asyncio.sleep(0.2)
+                        await asyncio.sleep(1)
+                        
+                # Tier 4: 每10轮查一次（2s间隔，主流币机会少）
+                if iteration % 10 == 0:
+                    for symbol in tier4:
+                        if not self.running:
+                            break
+                        try:
+                            await asyncio.wait_for(
+                                self.check_opportunity(symbol), 
+                                timeout=5.0
+                            )
+                        except asyncio.TimeoutError:
+                            continue
+                        await asyncio.sleep(2)
                     
                     # 清理旧统计
                     self._clean_old_stats()
