@@ -55,10 +55,36 @@ class Config:
 
         # 跨交易所套利币种（优化后的非主流币列表）
         self.cross_exchange_symbols = [
-            'SOL/USDT', 'AVAX/USDT', 'FET/USDT', 'POL/USDT', 'LINK/USDT',
-            'UNI/USDT', 'DOT/USDT', 'ATOM/USDT', 'ARB/USDT', 'OP/USDT',
-            'NEAR/USDT', 'APT/USDT', 'SUI/USDT', 'SEI/USDT', 'PYTH/USDT',
-            'JTO/USDT', 'WLD/USDT', 'ARKM/USDT', 'BTC/USDT', 'ETH/USDT',
+            # Tier 1: 高波动核心山寨币（重点监控）
+            'SOL/USDT',      # Solana，波动大
+            'AVAX/USDT',     # Avalanche
+            'FET/USDT',      # Fetch.ai，AI概念，波动极大
+            'LINK/USDT',     # Chainlink
+            'DOT/USDT',      # Polkadot
+    
+            # Tier 2: 中等市值活跃币种
+            'UNI/USDT',      # Uniswap
+            'ATOM/USDT',     # Cosmos
+            'ARB/USDT',      # Arbitrum，L2概念
+            'OP/USDT',       # Optimism，L2概念
+            'NEAR/USDT',     # NEAR Protocol
+    
+            # Tier 3: 新公链/生态币（波动极大）
+            'APT/USDT',      # Aptos
+            'SUI/USDT',      # Sui
+            'SEI/USDT',      # Sei，高性能链
+            'PYTH/USDT',     # Pyth，预言机
+            'JTO/USDT',      # Jito，Solana生态
+    
+            # Tier 4: 概念/Meme（极高波动，小仓位）
+            'WLD/USDT',      # Worldcoin，AI概念
+            'ARKM/USDT',     # Arkham，数据分析
+            'PEPE/USDT',     # Meme币
+            'WIF/USDT',      # Meme币
+    
+            # 主流币保留但低优先级
+            'BTC/USDT',      # 流动性太好，机会极少
+            'ETH/USDT',      # 流动性太好，机会极少
         ]
 
     def print_config(self):
