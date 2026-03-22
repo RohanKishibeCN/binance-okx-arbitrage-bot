@@ -6,7 +6,7 @@ import sys
 import os
 import json
 from notion_client import Client
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict
 
 from .config import config
@@ -139,10 +139,14 @@ class ArbitrageBot:
 
     async def _daily_report_loop(self):
         """每日报告循环 - UTC时间对应北京时间8点（UTC 00:00）"""
+
+        # 定义北京时间（UTC+8）
+        beijing_tz = timezone(timedelta(hours=8))
+        
         while self.running:
             try:
-                # 获取UTC时间（Railway默认）
-                now = datetime.utcnow()
+                # 使用北京时间
+                now = datetime.now(beijing_tz)
                 today = now.date()
 
                 # 早上 8:00 推送交易记录到 Notion
