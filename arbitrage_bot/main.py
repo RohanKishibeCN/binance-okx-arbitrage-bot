@@ -115,22 +115,29 @@ class ArbitrageBot:
         logger.info("✅ 已停止")
 
     async def _daily_report_loop(self):
-        """每日报告 - 仅8点推送交易记录到 Notion（nanobot 独立读取）"""
+        """每日报告循环 - UTC时间对应北京时间8点（UTC 00:00）"""
         while self.running:
             try:
-                now = datetime.now()
+                # 获取UTC时间（Railway默认）
+                now = datetime.utcnow()
                 today = now.date()
 
                 # 早上 8:00 推送交易记录到 Notion
-                if now.hour == 8 and now.minute == 0:
+                if now.hour == 0 and now.minute < 5:
                     if self.daily_records_sent != today:
                         self.daily_records_sent = today
-                        logger.info("📋 生成每日交易记录...")
-                        await self._send_daily_records()
+                        logger.info("📋 开始生成每日交易记录（北京时间8点）...")
+                        try:
+                            await self._send_daily_records()
+                            logger.info("✅ 每日交易记录已发送")
+                        except Exception as e:
+                            logger.error(f"❌ 发送失败: {e}", exc_info=True)
+                            # 失败时重置标记，允许重试
+                            self.daily_records_sent = None
 
                 await asyncio.sleep(60)
             except Exception as e:
-                logger.error(f"每日报告错误: {e}")
+                logger.error(f"每日报告循环错误: {e}")
                 await asyncio.sleep(60)
 
     async def _send_daily_records(self):
