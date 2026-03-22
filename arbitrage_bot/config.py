@@ -15,6 +15,7 @@ class ExchangeConfig:
         self.sandbox = get_env('EXCHANGE_SANDBOX', 'false').lower() == 'true'
         self.timeout = 30000
         self.enable_rate_limit = True
+        self.rate_limit = 100  # 每秒最大请求数（Binance默认1200/分钟，但建议保守设置）
 
 class RiskConfig:
     def __init__(self):
