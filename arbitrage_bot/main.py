@@ -258,10 +258,11 @@ class ArbitrageBot:
 
                 if not self.binance.is_connected():
                     await self.binance.initialize()
+                    
                 if not self.okx.is_connected():
                     await self.okx.initialize()
 
-                if check_count % 5 == 0:
+                if check_count % 10 == 0:
                     stats = self.risk_manager.get_stats()
                     logger.info(f"💓 健康检查 | 盈亏: {stats['daily_pnl']:.4f} | 交易: {stats['daily_trades']}")
 
