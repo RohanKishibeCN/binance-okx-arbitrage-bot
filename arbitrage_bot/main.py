@@ -40,13 +40,36 @@ class ArbitrageBot:
 
         self._print_config()
 
-        logger.info("\n📡 初始化交易所...")
-        self.binance = BinanceExchange()
-        self.okx = OKXExchange()
-        await self.binance.initialize()
-        await self.okx.initialize()
+        # 初始化交易所 - 带重试逻辑
+        logger.info("\n📡 初始化交易所连接...")
 
-        logger.info("\n🛡️ 初始化风控...")
+        max_retries = 5
+        retry_delay = 10  # 从10秒开始
+
+        for attempt in range(max_retries):
+            try:
+        
+                self.binance = BinanceExchange()
+                self.okx = OKXExchange()
+                
+                await self.binance.initialize()
+                await self.okx.initialize()
+
+                logger.info("\n🛡️ 初始化风控...")
+                break
+
+            except Exception as e:
+                if "418" in str(e) or "DDoS" in str(e):
+                    logger.error(f"⚠️ 交易所限流/IP被封，等待 {retry_delay} 秒后重试... (第{attempt+1}/{max_retries}次)")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # 指数退避：10s -> 20s -> 40s -> 80s
+                else:
+                    raise e
+
+        else:
+            raise Exception("交易所初始化失败，已达到最大重试次数")
+
+        
         self.risk_manager = RiskManager()
         await self.risk_manager.start()
 
