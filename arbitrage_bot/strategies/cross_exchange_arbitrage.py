@@ -59,7 +59,7 @@ class CrossExchangeArbitrage:
                     except asyncio.TimeoutError:
                         logger.warning(f"  {symbol} 检查超时，跳过")
                         continue
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(5)
                 
                 # Tier 2: 每2轮查一次（400ms间隔）
                 if iteration % 2 == 0:
@@ -73,7 +73,7 @@ class CrossExchangeArbitrage:
                             )
                         except asyncio.TimeoutError:
                             continue
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(5)
                 
                 # Tier 3: 每5轮查一次（1s间隔）
                 if iteration % 5 == 0:
@@ -87,7 +87,7 @@ class CrossExchangeArbitrage:
                             )
                         except asyncio.TimeoutError:
                             continue
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(5)
                         
                 # Tier 4: 每10轮查一次（2s间隔，主流币机会少）
                 if iteration % 10 == 0:
@@ -101,17 +101,17 @@ class CrossExchangeArbitrage:
                             )
                         except asyncio.TimeoutError:
                             continue
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(5)
                     
                     # 清理旧统计
                     self._clean_old_stats()
                 
                 logger.info(f"✅ 第 {iteration} 轮完成")
-                await asyncio.sleep(1)
+                await asyncio.sleep(10)
                 
             except Exception as e:
                 logger.error(f"❌ 跨所套利循环错误: {e}", exc_info=True)
-                await asyncio.sleep(5)
+                await asyncio.sleep(10)
 
     async def check_opportunity(self, symbol: str):
         """检查特定币种的套利机会"""
